@@ -122,6 +122,21 @@ struct PlatformWrapper {
   std::vector<std::string> exec_args;
 };
 
+class EnvironmentInstanceData {
+ public:
+  explicit EnvironmentInstanceData(
+      std::unique_ptr<node::CommonEnvironmentSetup>&& setup)
+      : setup_(std::move(setup)),
+        locker(setup_->isolate()),
+        isolate_scope(setup_->isolate()) {}
+  node::CommonEnvironmentSetup* setup() { return setup_.get(); };
+
+ private:
+  std::unique_ptr<node::CommonEnvironmentSetup> setup_;
+  v8::Locker locker;
+  v8::Isolate::Scope isolate_scope;
+};
+
 class HandleScopeWrapper {
  public:
   explicit HandleScopeWrapper(v8::Isolate* isolate) : scope(isolate) {}
@@ -853,27 +868,27 @@ napi_status NAPI_CDECL napi_create_environment(napi_platform platform,
                                                napi_env* result) {
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
-  auto setup = new std::unique_ptr<node::CommonEnvironmentSetup>;
-  *setup = node::CommonEnvironmentSetup::Create(
-      wrapper->platform.get(), &errors_vec, wrapper->args, wrapper->exec_args);
-  if (!setup) {
-    HANDLE_ERRORS_VECTOR(errors, errors_vec)
+
+  auto instance_data = new v8impl::EnvironmentInstanceData(
+      node::CommonEnvironmentSetup::Create(wrapper->platform.get(),
+                                           &errors_vec,
+                                           wrapper->args,
+                                           wrapper->exec_args));
+
+  if (instance_data->setup() == nullptr) {
+    HANDLE_ERRORS_VECTOR(errors, errors_vec);
+    return napi_generic_failure;
   }
 
-  v8::Isolate* isolate = (*setup)->isolate();
-  node::Environment* env = (*setup)->env();
-
-  v8::Locker locker(isolate);
-  v8::Isolate::Scope isolate_scope(isolate);
-  v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Context> context = (*setup)->context();
+  v8::HandleScope handle_scope(instance_data->setup()->isolate());
+  v8::Local<v8::Context> context = instance_data->setup()->context();
   v8::Context::Scope context_scope(context);
 
   v8::MaybeLocal<v8::Value> loadenv_ret =
-      node::LoadEnvironment(env, main_script);
+      node::LoadEnvironment(instance_data->setup()->env(), main_script);
 
   auto env__ = new node_napi_env__(context, wrapper->args[1]);
-  env__->instance_data = reinterpret_cast<void*>(setup);
+  env__->instance_data = reinterpret_cast<void*>(instance_data);
   *result = env__;
 
   if (loadenv_ret.IsEmpty()) return napi_pending_exception;
@@ -885,17 +900,16 @@ napi_status NAPI_CDECL napi_destroy_environment(napi_env env, int* exit_code) {
   node_napi_env node_env = reinterpret_cast<node_napi_env>(env);
 
   {
-    v8::Locker locker(node_env->isolate);
-    v8::Isolate::Scope isolate_scope(node_env->isolate);
     int r = node::SpinEventLoop(node_env->node_env()).FromMaybe(1);
     if (exit_code != nullptr) *exit_code = r;
     node::Stop(node_env->node_env());
   }
-  auto setup = reinterpret_cast<std::unique_ptr<node::CommonEnvironmentSetup>*>(
+  auto instance_data = reinterpret_cast<v8impl::EnvironmentInstanceData*>(
       node_env->instance_data);
 
   // This deletes the uniq_ptr to node::CommonEnvironmentSetup
-  delete setup;
+  // and the v8::locker
+  delete instance_data;
 
   return napi_ok;
 }
