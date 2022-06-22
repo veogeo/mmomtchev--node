@@ -1,6 +1,6 @@
-#include "node.h"
-#include "env-inl.h"
 #include "debug_utils-inl.h"
+#include "env-inl.h"
+#include "node.h"
 
 using v8::Context;
 using v8::Function;
@@ -15,6 +15,57 @@ using v8::SealHandleScope;
 
 namespace node {
 
+/**
+ * Spin the event loop until there are no pending callbacks or
+ * the condition returns false.
+ * Returns false if the environment died and true if the environment is
+ * reusable.
+ */
+bool SpinEventLoopWithoutCleanup(Environment* env,
+                                 const std::function<bool(void)>& condition) {
+  CHECK_NOT_NULL(env);
+  MultiIsolatePlatform* platform = GetMultiIsolatePlatform(env);
+  CHECK_NOT_NULL(platform);
+
+  Isolate* isolate = env->isolate();
+  HandleScope handle_scope(isolate);
+  Context::Scope context_scope(env->context());
+  SealHandleScope seal(isolate);
+
+  if (env->is_stopping()) return false;
+
+  env->set_trace_sync_io(env->options()->trace_sync_io);
+  bool more;
+  env->performance_state()->Mark(
+      node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_START);
+  do {
+    if (env->is_stopping()) return false;
+    int loop;
+    do {
+      loop = uv_run(env->event_loop(), UV_RUN_ONCE);
+    } while (loop && condition() && !env->is_stopping());
+    if (env->is_stopping()) return false;
+
+    platform->DrainTasks(isolate);
+
+    more = uv_loop_alive(env->event_loop());
+  } while (more);
+  env->performance_state()->Mark(
+      node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_EXIT);
+  env->set_trace_sync_io(false);
+  return true;
+}
+
+static const auto AlwaysTrue = []() { return true; };
+bool SpinEventLoopWithoutCleanup(Environment* env) {
+  return SpinEventLoopWithoutCleanup(env, AlwaysTrue);
+}
+
+/**
+ * Spin the event loop until there are no pending callbacks and
+ * then shutdown the environment. Returns a reference to the
+ * exit value or an empty reference on unexpected exit.
+ */
 Maybe<int> SpinEventLoop(Environment* env) {
   CHECK_NOT_NULL(env);
   MultiIsolatePlatform* platform = GetMultiIsolatePlatform(env);
@@ -30,34 +81,15 @@ Maybe<int> SpinEventLoop(Environment* env) {
   env->set_trace_sync_io(env->options()->trace_sync_io);
   {
     bool more;
-    env->performance_state()->Mark(
-        node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_START);
+
     do {
-      if (env->is_stopping()) break;
-      uv_run(env->event_loop(), UV_RUN_DEFAULT);
-      if (env->is_stopping()) break;
+      if (!SpinEventLoopWithoutCleanup(env)) break;
 
-      platform->DrainTasks(isolate);
+      if (EmitProcessBeforeExit(env).IsNothing()) break;
 
-      more = uv_loop_alive(env->event_loop());
-      if (more && !env->is_stopping()) continue;
-
-      if (EmitProcessBeforeExit(env).IsNothing())
-        break;
-
-      {
-        HandleScope handle_scope(isolate);
-        if (env->RunSnapshotSerializeCallback().IsEmpty()) {
-          break;
-        }
-      }
-
-      // Emit `beforeExit` if the loop became alive either after emitting
-      // event, or after running some callbacks.
+      // Loop if after `beforeExit` the loop became alive
       more = uv_loop_alive(env->event_loop());
     } while (more == true && !env->is_stopping());
-    env->performance_state()->Mark(
-        node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_EXIT);
   }
   if (env->is_stopping()) return Nothing<int>();
 
@@ -86,7 +118,7 @@ CommonEnvironmentSetup::CommonEnvironmentSetup(
     MultiIsolatePlatform* platform,
     std::vector<std::string>* errors,
     std::function<Environment*(const CommonEnvironmentSetup*)> make_env)
-  : impl_(new Impl()) {
+    : impl_(new Impl()) {
   CHECK_NOT_NULL(platform);
   CHECK_NOT_NULL(errors);
 
@@ -109,8 +141,8 @@ CommonEnvironmentSetup::CommonEnvironmentSetup(
   {
     Locker locker(isolate);
     Isolate::Scope isolate_scope(isolate);
-    impl_->isolate_data.reset(CreateIsolateData(
-        isolate, loop, platform, impl_->allocator.get()));
+    impl_->isolate_data.reset(
+        CreateIsolateData(isolate, loop, platform, impl_->allocator.get()));
 
     HandleScope handle_scope(isolate);
     Local<Context> context = NewContext(isolate);
@@ -145,8 +177,7 @@ CommonEnvironmentSetup::~CommonEnvironmentSetup() {
     isolate->Dispose();
 
     // Wait until the platform has cleaned up all relevant resources.
-    while (!platform_finished)
-      uv_run(&impl_->loop, UV_RUN_ONCE);
+    while (!platform_finished) uv_run(&impl_->loop, UV_RUN_ONCE);
   }
 
   if (impl_->isolate || impl_->loop.data != nullptr)
@@ -154,7 +185,6 @@ CommonEnvironmentSetup::~CommonEnvironmentSetup() {
 
   delete impl_;
 }
-
 
 uv_loop_t* CommonEnvironmentSetup::event_loop() const {
   return &impl_->loop;

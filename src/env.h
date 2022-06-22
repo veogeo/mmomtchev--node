@@ -967,6 +967,8 @@ struct SnapshotData {
   EnvSerializeInfo env_info;
 };
 
+class EmbeddedEnvironment {};
+
 class Environment : public MemoryRetainer {
  public:
   Environment(const Environment&) = delete;
@@ -1195,6 +1197,7 @@ class Environment : public MemoryRetainer {
   inline void set_has_serialized_options(bool has_serialized_options);
 
   inline bool is_main_thread() const;
+  inline bool is_embedded_env() const;
   inline bool no_native_addons() const;
   inline bool should_not_register_esm_loader() const;
   inline bool should_create_inspector() const;
@@ -1440,6 +1443,9 @@ class Environment : public MemoryRetainer {
   inline void set_process_exit_handler(
       std::function<void(Environment*, int)>&& handler);
 
+  inline EmbeddedEnvironment* get_embedded();
+  inline void set_embedded(EmbeddedEnvironment* env);
+
   void RunAndClearNativeImmediates(bool only_refed = false);
   void RunAndClearInterrupts();
 
@@ -1622,6 +1628,9 @@ class Environment : public MemoryRetainer {
   // track of the BackingStore for a given pointer.
   std::unordered_map<char*, std::unique_ptr<v8::BackingStore>>
       released_allocated_buffers_;
+
+  // Used for embedded instances
+  EmbeddedEnvironment* embedded_;
 };
 
 }  // namespace node
