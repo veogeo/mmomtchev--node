@@ -43,6 +43,6 @@ assert.strictEqual(
   92);
 
 assert.strictEqual(
-child_process.spawnSync(binary, ['function callMe(text) { return text + " you"; }'])
+  child_process.spawnSync(binary, ['function callMe(text) { return text + " you"; }'])
     .stdout.toString().trim(),
   'called you');
