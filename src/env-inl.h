@@ -637,6 +637,10 @@ inline bool Environment::is_main_thread() const {
   return worker_context() == nullptr;
 }
 
+inline bool Environment::is_embedded_env() const {
+  return embedded_ != nullptr;
+}
+
 inline bool Environment::no_native_addons() const {
   return (flags_ & EnvironmentFlags::kNoNativeAddons) ||
           !options_->allow_native_addons;
@@ -848,6 +852,13 @@ void Environment::set_main_utf16(std::unique_ptr<v8::String::Value> str) {
 void Environment::set_process_exit_handler(
     std::function<void(Environment*, int)>&& handler) {
   process_exit_handler_ = std::move(handler);
+}
+
+inline EmbeddedEnvironment* Environment::get_embedded() {
+  return embedded_;
+}
+inline void Environment::set_embedded(EmbeddedEnvironment* env) {
+  embedded_ = env;
 }
 
 #define VP(PropertyName, StringValue) V(v8::Private, PropertyName)
