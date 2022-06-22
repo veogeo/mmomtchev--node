@@ -515,6 +515,8 @@ the currently running Agent which was set by means of a previous call to
 `napi_set_instance_data()` will be overwritten. If a `finalize_cb` was provided
 by the previous call, it will not be called.
 
+Not compatible with `libnode`.
+
 ### `napi_get_instance_data`
 
 <!-- YAML
@@ -6251,6 +6253,95 @@ may exit before `func` is destroyed. Similar to [`uv_unref`][] it is also
 idempotent.
 
 This API may only be called from the main thread.
+
+## Using Node.js as a shared library (`libnode`)
+
+### `napi_create_platform`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_create_platform(int argc,
+                                    char** argv,
+                                    int exec_argc,
+                                    char** exec_argv,
+                                    char*** errors,
+                                    int thread_pool_size,
+                                    napi_platform* result);
+```
+
+* `[in] argc`: CLI argument count, pass 0 for autofilling
+* `[in] argv`: CLI arguments, pass NULL for autofilling
+* `[in] exec_argc`: Node.js CLI options count
+* `[in] exec_argv`: Node.js CLI options
+* `[in] errors`: If different than NULL, will receive an array of
+  strings that must be freed
+* `[in] thread_pool_size`: Thread pool size, 0 for automatic
+* `[out] result`: A `napi_platform` result
+
+This function must be called once to initialize V8 and Node.js when using as a
+shared library.
+
+### `napi_destroy_platform`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_destroy_platform(napi_platform platform, int *exit_code);
+```
+
+* `[in] platform`: platform handle
+* `[out] exit_code`: if not NULL will receive the process exit code
+
+Destroy the Node.js / V8 processes.
+
+### `napi_create_environment`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_create_environment(napi_platform platform,
+                                               char*** errors,
+                                               const char* main_script,
+                                               napi_env* result);
+```
+
+* `[in] platform`: platform handle
+* `[in] errors`: If different than NULL, will receive an array of strings
+  that must be freed
+* `[in] main_script`: JavaScript text
+* `[out] result`: A `napi_env` result
+
+Initialize a new environment. A single platform can hold multiple Node.js
+environments that will run in a separate V8 isolate each.
+
+### `napi_destroy_environment`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_destroy_environment(napi_env env);
+```
+
+* `[in] env`: environment handle
+
+Destroy the Node.js environment / V8 isolate.
 
 ## Miscellaneous utilities
 
