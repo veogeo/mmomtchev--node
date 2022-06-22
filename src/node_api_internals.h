@@ -3,6 +3,7 @@
 
 #include "v8.h"
 #define NAPI_EXPERIMENTAL
+#define NAPI_EMBEDDING
 #include "env-inl.h"
 #include "js_native_api_v8.h"
 #include "node_api.h"

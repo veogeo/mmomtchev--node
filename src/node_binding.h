@@ -9,6 +9,7 @@
 
 #include "node.h"
 #define NAPI_EXPERIMENTAL
+#define NAPI_EMBEDDING
 #include "node_api.h"
 #include "uv.h"
 

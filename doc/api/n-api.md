@@ -6290,6 +6290,136 @@ idempotent.
 
 This API may only be called from the main thread.
 
+## Using embedded Node.js
+
+### `napi_create_platform`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_create_platform(int argc,
+                                    char** argv,
+                                    int exec_argc,
+                                    char** exec_argv,
+                                    char*** errors,
+                                    int thread_pool_size,
+                                    napi_platform* result);
+```
+
+* `[in] argc`: CLI argument count, pass 0 for autofilling.
+* `[in] argv`: CLI arguments, pass NULL for autofilling.
+* `[in] exec_argc`: Node.js CLI options count.
+* `[in] exec_argv`: Node.js CLI options.
+* `[in] errors`: If different than NULL, will receive an array of
+  strings that must be freed.
+* `[in] thread_pool_size`: Thread pool size, 0 for automatic.
+* `[out] result`: A `napi_platform` result.
+
+This function must be called once to initialize V8 and Node.js when using as a
+shared library.
+
+### `napi_destroy_platform`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_destroy_platform(napi_platform platform, int *exit_code);
+```
+
+* `[in] platform`: platform handle.
+* `[out] exit_code`: if not NULL will receive the process exit code.
+
+Destroy the Node.js / V8 processes.
+
+### `napi_create_environment`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_create_environment(napi_platform platform,
+                                               char*** errors,
+                                               const char* main_script,
+                                               napi_env* result);
+```
+
+* `[in] platform`: platform handle.
+* `[in] errors`: If different than NULL, will receive an array of strings
+  that must be freed.
+* `[in] main_script`: If different than NULL, custom JavaScript to run in
+  addition to the default bootstrap that creates an empty
+  ready-to-use CJS/ES6 environment with `global.require()` and
+  `global.import()` functions that resolve modules from the directory of
+  the compiled binary.
+  It can be used to redirect `process.stdin`/ `process.stdout` streams
+  since Node.js might switch these file descriptors to non-blocking mode.
+* `[out] result`: A `napi_env` result.
+
+Initialize a new environment. A single platform can hold multiple Node.js
+environments that will run in a separate V8 isolate each. If the returned
+value is `napi_ok` or `napi_pending_exception`, the environment must be
+destroyed with `napi_destroy_environment` to free all allocated memory.
+
+### `napi_run_environment`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_run_environment(napi_env env);
+```
+
+### `napi_await_promise`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_await_promise(napi_env env,
+                            napi_value promise,
+                            napi_value *result);
+```
+
+* `[in] env`: environment handle.
+* `[in] promise`: JS Promise.
+* `[out] result`: Will receive the value that the Promise resolved with.
+
+Iterate the event loop of the environment until the `promise` has been
+resolved. Returns `napi_pending_exception` on rejection.
+
+### `napi_destroy_environment`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_destroy_environment(napi_env env);
+```
+
+* `[in] env`: environment handle.
+
+Destroy the Node.js environment / V8 isolate.
+
 ## Miscellaneous utilities
 
 ### `node_api_get_module_file_name`

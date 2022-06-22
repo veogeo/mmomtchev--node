@@ -1,6 +1,7 @@
 #include "async_wrap-inl.h"
 #include "env-inl.h"
 #define NAPI_EXPERIMENTAL
+#define NAPI_EMBEDDING
 #include "js_native_api_v8.h"
 #include "memory_tracker-inl.h"
 #include "node_api.h"
