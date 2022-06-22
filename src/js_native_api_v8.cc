@@ -128,7 +128,7 @@ class EnvironmentInstanceData {
       : setup_(std::move(setup)),
         locker(setup_->isolate()),
         isolate_scope(setup_->isolate()) {}
-  node::CommonEnvironmentSetup* setup() { return setup_.get(); };
+  node::CommonEnvironmentSetup* setup() { return setup_.get(); }
 
  private:
   std::unique_ptr<node::CommonEnvironmentSetup> setup_;
@@ -806,7 +806,8 @@ napi_status napi_get_last_error_info(napi_env env,
       for (const std::string& error : vec)                                     \
         fprintf(stderr, "%s\n", error.c_str());                                \
     } else {                                                                   \
-      *errors = (char**)malloc(sizeof(char**) * (vec.size() + 1));             \
+      *errors =                                                                \
+          reinterpret_cast<char**>(malloc(sizeof(char**) * (vec.size() + 1))); \
       if (errors == nullptr) return napi_generic_failure;                      \
       char** cur_error = *errors;                                              \
       for (const std::string& error : vec) {                                   \
