@@ -98,7 +98,27 @@ NAPI_EXTERN napi_status node_api_symbol_for(napi_env env,
                                             const char* utf8description,
                                             size_t length,
                                             napi_value* result);
+NAPI_EXTERN napi_status
+node_api_symbol_for(napi_env env,
+                    const char* utf8description,
+                    size_t length,
+                    napi_value* result);
+NAPI_EXTERN napi_status napi_create_platform(int argc,
+                                             char** argv,
+                                             int exec_argc,
+                                             char** exec_argv,
+                                             char*** errors,
+                                             int thread_pool_size,
+                                             napi_platform* result);
+NAPI_EXTERN napi_status napi_destroy_platform(napi_platform platform);
+NAPI_EXTERN napi_status napi_create_environment(napi_platform platform,
+                                                char*** errors,
+                                                const char* main_script,
+                                                napi_env* result);
+
+NAPI_EXTERN napi_status napi_destroy_environment(napi_env env, int* exit_code);
 #endif  // NAPI_EXPERIMENTAL
+
 NAPI_EXTERN napi_status napi_create_function(napi_env env,
                                              const char* utf8name,
                                              size_t length,
