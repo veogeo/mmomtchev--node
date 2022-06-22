@@ -5,6 +5,7 @@
 #include "env-inl.h"
 #include "js_native_api.h"
 #include "js_native_api_v8.h"
+#include "node_api_internals.h"
 #include "util-inl.h"
 
 #define CHECK_MAYBE_NOTHING(env, maybe, status)                                \
@@ -109,6 +110,17 @@ inline static v8impl::Persistent<v8::Value>* NodePersistentFromJsDeferred(
     napi_deferred local) {
   return reinterpret_cast<v8impl::Persistent<v8::Value>*>(local);
 }
+
+struct PlatformWrapper {
+  explicit PlatformWrapper(int argc,
+                           char** argv,
+                           int exec_argc,
+                           char** exec_argv)
+      : args(argv, argv + argc), exec_args(exec_argv, exec_argv + exec_argc) {}
+  std::unique_ptr<node::MultiIsolatePlatform> platform;
+  std::vector<std::string> args;
+  std::vector<std::string> exec_args;
+};
 
 class HandleScopeWrapper {
  public:
@@ -772,6 +784,120 @@ napi_status NAPI_CDECL napi_get_last_error_info(
     napi_clear_last_error(env);
   }
   *result = &(env->last_error);
+  return napi_ok;
+}
+
+#define HANDLE_ERRORS_VECTOR(errors, vec)                                      \
+  {                                                                            \
+    if (errors == nullptr) {                                                   \
+      for (const std::string& error : vec)                                     \
+        fprintf(stderr, "%s\n", error.c_str());                                \
+    } else {                                                                   \
+      *errors = (char**)malloc(sizeof(char**) * (vec.size() + 1));             \
+      if (errors == nullptr) return napi_generic_failure;                      \
+      char** cur_error = *errors;                                              \
+      for (const std::string& error : vec) {                                   \
+        *(cur_error++) = strdup(error.c_str());                                \
+      }                                                                        \
+      *cur_error = nullptr;                                                    \
+    }                                                                          \
+  }
+
+napi_status NAPI_CDECL napi_create_platform(int argc,
+                                            char** argv,
+                                            int exec_argc,
+                                            char** exec_argv,
+                                            char*** errors,
+                                            int thread_pool_size,
+                                            napi_platform* result) {
+  argv = uv_setup_args(argc, argv);
+  std::vector<std::string> errors_vec;
+
+  v8impl::PlatformWrapper* platform =
+      new v8impl::PlatformWrapper(argc, argv, exec_argc, exec_argv);
+  if (platform->args.size() < 1) platform->args.push_back("libnode");
+  if (platform->args.size() < 2) platform->args.push_back("<internal>");
+
+  int exit_code = node::InitializeNodeWithArgs(
+      &platform->args, &platform->exec_args, &errors_vec);
+
+  HANDLE_ERRORS_VECTOR(errors, errors_vec);
+
+  if (exit_code != 0) {
+    return napi_generic_failure;
+  }
+
+  if (thread_pool_size <= 0)
+    thread_pool_size = node::per_process::cli_options->v8_thread_pool_size;
+
+  platform->platform = node::MultiIsolatePlatform::Create(thread_pool_size);
+  v8::V8::InitializePlatform(platform->platform.get());
+  v8::V8::Initialize();
+  *result = reinterpret_cast<napi_platform>(platform);
+  return napi_ok;
+}
+
+napi_status NAPI_CDECL napi_destroy_platform(napi_platform platform) {
+  auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
+  v8::V8::Dispose();
+  v8::V8::ShutdownPlatform();
+
+  // The node::CommonEnvironmentSetup::Create uniq_ptr is destroyed here
+  delete wrapper;
+  return napi_ok;
+}
+
+napi_status NAPI_CDECL napi_create_environment(napi_platform platform,
+                                               char*** errors,
+                                               const char* main_script,
+                                               napi_env* result) {
+  auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
+  std::vector<std::string> errors_vec;
+  auto setup = new std::unique_ptr<node::CommonEnvironmentSetup>;
+  *setup = node::CommonEnvironmentSetup::Create(
+      wrapper->platform.get(), &errors_vec, wrapper->args, wrapper->exec_args);
+  if (!setup) {
+    HANDLE_ERRORS_VECTOR(errors, errors_vec)
+  }
+
+  v8::Isolate* isolate = (*setup)->isolate();
+  node::Environment* env = (*setup)->env();
+
+  v8::Locker locker(isolate);
+  v8::Isolate::Scope isolate_scope(isolate);
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context = (*setup)->context();
+  v8::Context::Scope context_scope(context);
+
+  v8::MaybeLocal<v8::Value> loadenv_ret =
+      node::LoadEnvironment(env, main_script);
+
+  if (loadenv_ret.IsEmpty()) return napi_pending_exception;
+
+  auto env__ = new node_napi_env__(context, wrapper->args[1]);
+  env__->instance_data = reinterpret_cast<void*>(setup);
+  *result = env__;
+
+  return napi_ok;
+}
+
+napi_status NAPI_CDECL napi_destroy_environment(napi_env env, int* exit_code) {
+  CHECK_ARG(env, env);
+  node_napi_env node_env = reinterpret_cast<node_napi_env>(env);
+
+  {
+    v8::Locker locker(node_env->isolate);
+    v8::Isolate::Scope isolate_scope(node_env->isolate);
+    int r = node::SpinEventLoop(node_env->node_env()).FromMaybe(1);
+    if (exit_code != nullptr) *exit_code = r;
+    node::Stop(node_env->node_env());
+  }
+  auto setup = reinterpret_cast<std::unique_ptr<node::CommonEnvironmentSetup>*>(
+      node_env->instance_data);
+
+  // This deletes the uniq_ptr to node::CommonEnvironmentSetup
+  delete setup;
+
   return napi_ok;
 }
 
