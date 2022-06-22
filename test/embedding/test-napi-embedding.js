@@ -41,3 +41,8 @@ const fixturePath = JSON.stringify(fixtures.path('exit.js'));
 assert.strictEqual(
   child_process.spawnSync(binary, [`require(${fixturePath})`, 92]).status,
   92);
+
+assert.strictEqual(
+child_process.spawnSync(binary, ['function callMe(text) { return text + " you"; }'])
+    .stdout.toString().trim(),
+  'called you');
