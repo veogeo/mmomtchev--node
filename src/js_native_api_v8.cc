@@ -872,12 +872,11 @@ napi_status NAPI_CDECL napi_create_environment(napi_platform platform,
   v8::MaybeLocal<v8::Value> loadenv_ret =
       node::LoadEnvironment(env, main_script);
 
-  if (loadenv_ret.IsEmpty()) return napi_pending_exception;
-
   auto env__ = new node_napi_env__(context, wrapper->args[1]);
   env__->instance_data = reinterpret_cast<void*>(setup);
   *result = env__;
 
+  if (loadenv_ret.IsEmpty()) return napi_pending_exception;
   return napi_ok;
 }
 
