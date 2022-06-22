@@ -390,7 +390,6 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
 
   while (r != 0 && loop->stop_flag == 0) {
     uv__update_time(loop);
-    uv__run_timers(loop);
 
     can_sleep =
         QUEUE_EMPTY(&loop->pending_queue) && QUEUE_EMPTY(&loop->idle_handles);
@@ -416,6 +415,8 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
      * the timeout == 0) or was already updated b/c an event was received.
      */
     uv__metrics_update_idle_time(loop);
+
+    uv__run_timers(loop);
 
     uv__run_check(loop);
     uv__run_closing_handles(loop);
