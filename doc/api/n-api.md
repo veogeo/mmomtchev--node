@@ -515,7 +515,8 @@ the currently running Agent which was set by means of a previous call to
 `napi_set_instance_data()` will be overwritten. If a `finalize_cb` was provided
 by the previous call, it will not be called.
 
-Not compatible with `libnode`.
+Should not be used in embedded Node.js on `napi_env` obtained from
+`napi_create_environment`.
 
 ### `napi_get_instance_data`
 
