@@ -832,7 +832,6 @@ napi_status NAPI_CDECL napi_create_platform(int argc,
   v8impl::PlatformWrapper* platform =
       new v8impl::PlatformWrapper(argc, argv, exec_argc, exec_argv);
   if (platform->args.size() < 1) platform->args.push_back("libnode");
-  if (platform->args.size() < 2) platform->args.push_back("<internal>");
 
   int exit_code = node::InitializeNodeWithArgs(
       &platform->args, &platform->exec_args, &errors_vec);
