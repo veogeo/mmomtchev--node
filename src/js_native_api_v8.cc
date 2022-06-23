@@ -888,6 +888,9 @@ napi_status napi_create_environment(napi_platform platform,
 
   auto env__ = new node_napi_env__(context, wrapper->args[1]);
   env__->instance_data = reinterpret_cast<void*>(instance_data);
+  env__->node_env()->AddCleanupHook(
+      [](void* arg) { static_cast<napi_env>(arg)->Unref(); },
+      static_cast<void*>(env__));
   *result = env__;
 
   if (loadenv_ret.IsEmpty()) return napi_pending_exception;
