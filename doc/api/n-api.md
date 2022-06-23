@@ -6254,7 +6254,7 @@ idempotent.
 
 This API may only be called from the main thread.
 
-## Using Node.js as a shared library (`libnode`)
+## Using embedded Node.js
 
 ### `napi_create_platform`
 
