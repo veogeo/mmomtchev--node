@@ -6337,6 +6337,23 @@ napi_status napi_create_environment(napi_platform platform,
 Initialize a new environment. A single platform can hold multiple Node.js
 environments that will run in a separate V8 isolate each.
 
+### `napi_run_environment`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_run_environment(napi_env env);
+```
+
+* `[in] env`: environment handle
+
+Iterate the event loop of the environment, ensuring that all pending async
+callbacks have been executed.
+
 ### `napi_destroy_environment`
 
 <!-- YAML
