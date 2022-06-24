@@ -887,7 +887,9 @@ napi_status NAPI_CDECL napi_create_environment(napi_platform platform,
   v8::MaybeLocal<v8::Value> loadenv_ret =
       node::LoadEnvironment(instance_data->setup()->env(), main_script);
 
-  auto env__ = new node_napi_env__(context, wrapper->args[1]);
+  std::string filename =
+      wrapper->args.size() > 1 ? wrapper->args[1] : "<internal>";
+  auto env__ = new node_napi_env__(context, filename);
   env__->instance_data = reinterpret_cast<void*>(instance_data);
   env__->node_env()->AddCleanupHook(
       [](void* arg) { static_cast<napi_env>(arg)->Unref(); },
