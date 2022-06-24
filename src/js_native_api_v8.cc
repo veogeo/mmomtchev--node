@@ -902,17 +902,25 @@ napi_status napi_destroy_environment(napi_env env, int* exit_code) {
   CHECK_ARG(env, env);
   node_napi_env node_env = reinterpret_cast<node_napi_env>(env);
 
-  {
-    int r = node::SpinEventLoop(node_env->node_env()).FromMaybe(1);
-    if (exit_code != nullptr) *exit_code = r;
-    node::Stop(node_env->node_env());
-  }
+  int r = node::SpinEventLoop(node_env->node_env()).FromMaybe(1);
+  if (exit_code != nullptr) *exit_code = r;
+  node::Stop(node_env->node_env());
   auto instance_data = reinterpret_cast<v8impl::EnvironmentInstanceData*>(
       node_env->instance_data);
 
   // This deletes the uniq_ptr to node::CommonEnvironmentSetup
   // and the v8::locker
   delete instance_data;
+
+  return napi_ok;
+}
+
+napi_status napi_run_environment(napi_env env) {
+  CHECK_ARG(env, env);
+  node_napi_env node_env = reinterpret_cast<node_napi_env>(env);
+
+  bool r = node::SpinEventLoopOnce(node_env->node_env());
+  if (!r) return napi_closing;
 
   return napi_ok;
 }
