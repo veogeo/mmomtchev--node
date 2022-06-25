@@ -47,7 +47,7 @@ assert.strictEqual(
     .stdout.toString().trim(),
   'called you');
 
-  assert.strictEqual(
+assert.strictEqual(
   child_process.spawnSync(binary, ['function waitMe(text, cb) { setTimeout(() => cb(text + " you"), 1); }'])
     .stdout.toString().trim(),
   'waited you');
