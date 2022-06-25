@@ -154,10 +154,9 @@ CommonEnvironmentSetup::~CommonEnvironmentSetup() {
     }
 
     bool platform_finished = false;
-    impl_->platform->AddIsolateFinishedCallback(
-        isolate,
-        [](void* data) { * static_cast<bool*>(data) = true; },
-        &platform_finished);
+    impl_->platform->AddIsolateFinishedCallback(isolate, [](void* data) {
+      *static_cast<bool*>(data) = true;
+    }, &platform_finished);
     impl_->platform->UnregisterIsolate(isolate);
     isolate->Dispose();
 
