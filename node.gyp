@@ -1310,6 +1310,7 @@
 
       'sources': [
         'src/node_snapshot_stub.cc',
+        'src/node_code_cache_stub.cc',
         'test/embedding/napi_embedding.c',
       ],
 
