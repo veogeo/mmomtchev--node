@@ -127,13 +127,26 @@ class EnvironmentInstanceData {
       std::unique_ptr<node::CommonEnvironmentSetup>&& setup)
       : setup_(std::move(setup)),
         locker(setup_->isolate()),
-        isolate_scope(setup_->isolate()) {}
+        isolate_scope(setup_->isolate()),
+        handle_scope(setup_->isolate()),
+        context_scope(setup_->context()),
+        seal_scope(nullptr) {}
   node::CommonEnvironmentSetup* setup() { return setup_.get(); }
+  inline void seal() {
+    seal_scope =
+        std::make_unique<node::DebugSealHandleScope>(setup_->isolate());
+  }
 
  private:
   std::unique_ptr<node::CommonEnvironmentSetup> setup_;
   v8::Locker locker;
   v8::Isolate::Scope isolate_scope;
+  v8::HandleScope handle_scope;
+  v8::Context::Scope context_scope;
+  // As this handle scope will remain open for the lifetime
+  // of the environment, we seal it to prevent it from
+  // becoming everyone's favorite trash bin
+  std::unique_ptr<node::DebugSealHandleScope> seal_scope;
 };
 
 class HandleScopeWrapper {
@@ -867,32 +880,30 @@ napi_status napi_create_environment(napi_platform platform,
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
 
-  auto instance_data = new v8impl::EnvironmentInstanceData(
-      node::CommonEnvironmentSetup::Create(wrapper->platform.get(),
-                                           &errors_vec,
-                                           wrapper->args,
-                                           wrapper->exec_args));
-
-  if (instance_data->setup() == nullptr) {
+  auto setup = node::CommonEnvironmentSetup::Create(
+      wrapper->platform.get(),
+      &errors_vec,
+      wrapper->args,
+      wrapper->exec_args);
+  if (setup == nullptr) {
     HANDLE_ERRORS_VECTOR(errors, errors_vec);
     return napi_generic_failure;
   }
-
-  v8::HandleScope handle_scope(instance_data->setup()->isolate());
-  v8::Local<v8::Context> context = instance_data->setup()->context();
-  v8::Context::Scope context_scope(context);
+  auto instance_data = new v8impl::EnvironmentInstanceData(std::move(setup));
 
   v8::MaybeLocal<v8::Value> loadenv_ret =
       node::LoadEnvironment(instance_data->setup()->env(), main_script);
 
   std::string filename =
       wrapper->args.size() > 1 ? wrapper->args[1] : "<internal>";
-  auto env__ = new node_napi_env__(context, filename);
+  auto env__ =
+    new node_napi_env__(instance_data->setup()->context(), filename);
   env__->instance_data = reinterpret_cast<void*>(instance_data);
   env__->node_env()->AddCleanupHook(
       [](void* arg) { static_cast<napi_env>(arg)->Unref(); },
       static_cast<void*>(env__));
   *result = env__;
+  instance_data->seal();
 
   if (loadenv_ret.IsEmpty()) return napi_pending_exception;
   return napi_ok;
