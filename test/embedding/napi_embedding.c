@@ -85,6 +85,12 @@ int callMe(napi_env env) {
     return -1;
   }
 
+  napi_value object;
+  if (napi_create_object(env, &object) != napi_ok) {
+    fprintf(stderr, "Failed creating an object\n");
+    return -1;
+  }
+
   napi_close_handle_scope(env, scope);
   return 0;
 }
