@@ -874,30 +874,35 @@ napi_status napi_destroy_platform(napi_platform platform) {
 }
 
 napi_status napi_create_environment(napi_platform platform,
-                                               char*** errors,
-                                               const char* main_script,
-                                               napi_env* result) {
+                                    char*** errors,
+                                    const char* main_script,
+                                    napi_env* result) {
+  static const char* default_main_script =
+      "const CJSLoader = require('internal/modules/cjs/loader');"
+      "global.module = new CJSLoader.Module();"
+      "global.require = require('module').createRequire(process.cwd() + "
+      "'/');";
+
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
 
   auto setup = node::CommonEnvironmentSetup::Create(
-      wrapper->platform.get(),
-      &errors_vec,
-      wrapper->args,
-      wrapper->exec_args);
+      wrapper->platform.get(), &errors_vec, wrapper->args, wrapper->exec_args);
   if (setup == nullptr) {
     HANDLE_ERRORS_VECTOR(errors, errors_vec);
     return napi_generic_failure;
   }
   auto instance_data = new v8impl::EnvironmentInstanceData(std::move(setup));
 
+  if (main_script == nullptr)
+    main_script = default_main_script;
+
   v8::MaybeLocal<v8::Value> loadenv_ret =
       node::LoadEnvironment(instance_data->setup()->env(), main_script);
 
   std::string filename =
       wrapper->args.size() > 1 ? wrapper->args[1] : "<internal>";
-  auto env__ =
-    new node_napi_env__(instance_data->setup()->context(), filename);
+  auto env__ = new node_napi_env__(instance_data->setup()->context(), filename);
   env__->instance_data = reinterpret_cast<void*>(instance_data);
   env__->node_env()->AddCleanupHook(
       [](void* arg) { static_cast<napi_env>(arg)->Unref(); },

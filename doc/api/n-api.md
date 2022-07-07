@@ -6322,7 +6322,8 @@ napi_status napi_create_environment(napi_platform platform,
 * `[in] platform`: platform handle
 * `[in] errors`: If different than NULL, will receive an array of strings
   that must be freed
-* `[in] main_script`: JavaScript text
+* `[in] main_script`: Custom JavaScript main to run, NULL for an empty
+  ready-to-use CJS environment with a `global.require()` function
 * `[out] result`: A `napi_env` result
 
 Initialize a new environment. A single platform can hold multiple Node.js
