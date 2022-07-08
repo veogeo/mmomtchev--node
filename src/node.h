@@ -560,17 +560,20 @@ NODE_EXTERN struct uv_loop_s* GetCurrentEventLoop(v8::Isolate* isolate);
 
 // Runs the main loop for a given Environment. This roughly performs the
 // following steps:
-// 1. Call uv_run() on the event loop until it is drained.
+// 1. Call uv_run() on the event loop until it is drained or the optional
+//   condition returns false.
 // 2. Call platform->DrainTasks() on the associated platform/isolate.
 //   3. If the event loop is alive again, go to Step 1.
 // Returns false if the environment died and true if it can be reused.
 // This function only works if `env` has an associated `MultiIsolatePlatform`.
-NODE_EXTERN bool SpinEventLoopOnce(Environment* env);
+bool SpinEventLoopWithoutCleanup(Environment* env,
+                                 const std::function<bool(void)>& condition);
+bool SpinEventLoopWithoutCleanup(Environment* env);
 
 // Runs the main loop for a given Environment and performs environment
 // shutdown when the loop exits. This roughly performs the
 // following steps:
-// 1. Call SpinEventLoopOnce()
+// 1. Call SpinEventLoopWithoutCleanup()
 // 2. Call EmitProcessBeforeExit().
 //   3. If the event loop is alive again, go to Step 1.
 // 4. Call EmitProcessExit() and forward the return value.
