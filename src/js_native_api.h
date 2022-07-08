@@ -115,32 +115,11 @@ NAPI_EXTERN napi_status napi_create_environment(napi_platform platform,
                                                 char*** errors,
                                                 const char* main_script,
                                                 napi_env* result);
-
 NAPI_EXTERN napi_status napi_destroy_environment(napi_env env, int* exit_code);
-
-NAPI_EXTERN napi_status napi_create_platform(int argc,
-                                             char** argv,
-                                             int exec_argc,
-                                             char** exec_argv,
-                                             char*** errors,
-                                             int thread_pool_size,
-                                             napi_platform* result);
-
-NAPI_EXTERN napi_status napi_destroy_platform(napi_platform platform);
-
-NAPI_EXTERN napi_status napi_create_environment(napi_platform platform,
-                                                char*** errors,
-                                                const char* main_script,
-                                                napi_env* result);
-
 NAPI_EXTERN napi_status napi_run_environment(napi_env env);
-
 NAPI_EXTERN napi_status napi_await_promise(napi_env env,
                                            napi_value promise,
                                            napi_value* result);
-
-NAPI_EXTERN napi_status napi_destroy_environment(napi_env env, int* exit_code);
-
 #endif  // NAPI_EXPERIMENTAL
 
 NAPI_EXTERN napi_status napi_create_function(napi_env env,
