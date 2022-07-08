@@ -16,11 +16,13 @@ using v8::SealHandleScope;
 namespace node {
 
 /**
- * Spin the event loop until there are no pending callbacks.
+ * Spin the event loop until there are no pending callbacks or
+ * the condition returns false.
  * Returns false if the environment died and true if the environment is
  * reusable.
  */
-bool SpinEventLoopOnce(Environment* env) {
+bool SpinEventLoopWithoutCleanup(Environment* env,
+                                 const std::function<bool(void)>& condition) {
   CHECK_NOT_NULL(env);
   MultiIsolatePlatform* platform = GetMultiIsolatePlatform(env);
   CHECK_NOT_NULL(platform);
@@ -38,7 +40,10 @@ bool SpinEventLoopOnce(Environment* env) {
       node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_START);
   do {
     if (env->is_stopping()) return false;
-    uv_run(env->event_loop(), UV_RUN_DEFAULT);
+    int loop;
+    do {
+      loop = uv_run(env->event_loop(), UV_RUN_ONCE);
+    } while (loop && condition());
     if (env->is_stopping()) return false;
 
     platform->DrainTasks(isolate);
@@ -49,6 +54,11 @@ bool SpinEventLoopOnce(Environment* env) {
       node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_EXIT);
   env->set_trace_sync_io(false);
   return true;
+}
+
+static const auto AlwaysTrue = []() { return true; };
+bool SpinEventLoopWithoutCleanup(Environment* env) {
+  return SpinEventLoopWithoutCleanup(env, AlwaysTrue);
 }
 
 /**
@@ -73,7 +83,7 @@ Maybe<int> SpinEventLoop(Environment* env) {
     bool more;
 
     do {
-      if (!SpinEventLoopOnce(env)) break;
+      if (!SpinEventLoopWithoutCleanup(env)) break;
 
       if (EmitProcessBeforeExit(env).IsNothing()) break;
 

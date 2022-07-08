@@ -143,6 +143,10 @@ napi_create_environment(napi_platform platform,
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_run_environment(napi_env env);
 
+NAPI_EXTERN napi_status NAPI_CDECL napi_await_promise(napi_env env,
+                                                     napi_value promise,
+                                                     napi_value* result);
+
 NAPI_EXTERN napi_status NAPI_CDECL napi_destroy_environment(napi_env env,
                                                             int* exit_code);
 

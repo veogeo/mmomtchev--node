@@ -51,3 +51,10 @@ assert.strictEqual(
   child_process.spawnSync(binary, ['function waitMe(text, cb) { setTimeout(() => cb(text + " you"), 1); }'])
     .stdout.toString().trim(),
   'waited you');
+
+assert.strictEqual(
+  child_process.spawnSync(binary,
+                          ['function waitPromise(text)' +
+                          '{ return new Promise((res) => setTimeout(() => res(text + " with cheese"), 1)); }'])
+    .stdout.toString().trim(),
+  'waited with cheese');

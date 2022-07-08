@@ -6355,6 +6355,27 @@ napi_status napi_run_environment(napi_env env);
 Iterate the event loop of the environment, ensuring that all pending async
 callbacks have been executed.
 
+### `napi_await_promise`
+
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+napi_status napi_await_promise(napi_env env,
+                            napi_value promise,
+                            napi_value *result);
+```
+
+* `[in] env`: environment handle
+* `[in] promise`: JS Promise
+* `[out] result`: Will receive the value that the Promise resolved with
+
+Iterate the event loop of the environment until the `promise` has been
+resolved. Returns `napi_pending_exception` on rejection.
+
 ### `napi_destroy_environment`
 
 <!-- YAML

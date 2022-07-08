@@ -936,9 +936,37 @@ napi_status NAPI_CDECL napi_run_environment(napi_env env) {
   CHECK_ARG(env, env);
   node_napi_env node_env = reinterpret_cast<node_napi_env>(env);
 
-  bool r = node::SpinEventLoopOnce(node_env->node_env());
+  bool r = node::SpinEventLoopWithoutCleanup(node_env->node_env());
   if (!r) return napi_closing;
 
+  return napi_ok;
+}
+
+napi_status napi_await_promise(napi_env env,
+                               napi_value promise,
+                               napi_value* result) {
+  NAPI_PREAMBLE(env);
+  CHECK_ARG(env, result);
+
+  v8::EscapableHandleScope scope(env->isolate);
+  node_napi_env node_env = reinterpret_cast<node_napi_env>(env);
+
+  v8::Local<v8::Value> promise_value = v8impl::V8LocalValueFromJsValue(promise);
+  if (promise_value.IsEmpty() || !promise_value->IsPromise())
+    return napi_invalid_arg;
+  v8::Local<v8::Promise> promise_object = promise_value.As<v8::Promise>();
+
+  bool r = node::SpinEventLoopWithoutCleanup(
+      node_env->node_env(), [&promise_object]() {
+        return promise_object->State() == v8::Promise::PromiseState::kPending;
+      });
+
+  if (!r) return napi_closing;
+  if (promise_object->State() == v8::Promise::PromiseState::kRejected)
+    return napi_pending_exception;
+
+  *result =
+      v8impl::JsValueFromV8LocalValue(scope.Escape(promise_object->Result()));
   return napi_ok;
 }
 
