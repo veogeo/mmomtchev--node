@@ -881,7 +881,13 @@ napi_status napi_create_environment(napi_platform platform,
       "const CJSLoader = require('internal/modules/cjs/loader');"
       "global.module = new CJSLoader.Module();"
       "global.require = require('module').createRequire(process.cwd() + "
-      "'/');";
+      "'/');"
+      "const ESMLoader = require('internal/modules/esm/loader').ESMLoader;"
+      "const internalLoader = new ESMLoader;"
+      "const parent_path = require('url').pathToFileURL(process.cwd()).href + "
+      "'/';"
+      "global.import = (mod) => internalLoader.import(mod, parent_path, "
+      "Object.create(null));";
 
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
