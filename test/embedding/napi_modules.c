@@ -9,8 +9,13 @@
     return -1;                                                                 \
   }
 
-int main() {
+int main(int argc, char *argv[]) {
   napi_platform platform;
+
+  if (argc < 3) {
+      fprintf(stderr, "napi_modules <cjs.cjs> <es6.mjs>\n");
+      return -2;
+  }
 
   CHECK(napi_create_platform(0, NULL, 0, NULL, NULL, 0, &platform),
         "Failed creating the platform");
@@ -33,9 +38,9 @@ int main() {
   CHECK(napi_get_property(env, global, import_name, &import), "import");
   CHECK(napi_get_property(env, global, require_name, &require), "require");
 
-  CHECK(napi_create_string_utf8(env, "./cjs.cjs", strlen("./cjs.cjs"), &cjs),
+  CHECK(napi_create_string_utf8(env, argv[1], strlen(argv[1]), &cjs),
         "create_string");
-  CHECK(napi_create_string_utf8(env, "./es6.mjs", strlen("./es6.mjs"), &es6),
+  CHECK(napi_create_string_utf8(env, argv[2], strlen(argv[2]), &es6),
         "create_string");
   CHECK(napi_create_string_utf8(env, "value", strlen("value"), &value),
         "create_string");

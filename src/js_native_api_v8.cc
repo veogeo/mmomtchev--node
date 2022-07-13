@@ -880,12 +880,10 @@ napi_status napi_create_environment(napi_platform platform,
   static const char* default_main_script =
       "const CJSLoader = require('internal/modules/cjs/loader');"
       "global.module = new CJSLoader.Module();"
-      "global.require = require('module').createRequire(process.cwd() + "
-      "'/');"
+      "global.require = require('module').createRequire(process.argv[0]);"
       "const ESMLoader = require('internal/modules/esm/loader').ESMLoader;"
       "const internalLoader = new ESMLoader;"
-      "const parent_path = require('url').pathToFileURL(process.cwd()).href + "
-      "'/';"
+      "const parent_path = require('url').pathToFileURL(process.argv[0]);"
       "global.import = (mod) => internalLoader.import(mod, parent_path, "
       "Object.create(null));";
 
