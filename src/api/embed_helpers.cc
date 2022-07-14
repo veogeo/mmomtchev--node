@@ -49,7 +49,7 @@ bool SpinEventLoopWithoutCleanup(Environment* env,
     platform->DrainTasks(isolate);
 
     more = uv_loop_alive(env->event_loop());
-  } while (more && !env->is_stopping());
+  } while (more);
   env->performance_state()->Mark(
       node::performance::NODE_PERFORMANCE_MILESTONE_LOOP_EXIT);
   env->set_trace_sync_io(false);
