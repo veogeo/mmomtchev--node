@@ -41,7 +41,7 @@ bool SpinEventLoopWithoutCleanup(Environment* env,
     if (env->is_stopping()) return false;
     int loop;
     do {
-      loop = uv_run(env->event_loop(), UV_RUN_NOWAIT);
+      loop = uv_run(env->event_loop(), UV_RUN_ONCE);
     } while (loop && condition() && !env->is_stopping());
     if (env->is_stopping()) return false;
 
