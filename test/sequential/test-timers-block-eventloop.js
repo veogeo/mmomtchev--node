@@ -9,7 +9,7 @@ let called = false;
 const t1 = setInterval(() => {
   // Temporarily disable this test until there is a solution for
   // https://github.com/libuv/libuv/issues/3686
-  //assert(!called);
+  assert(!called);
   called = true;
   setImmediate(common.mustCall(() => {
     clearInterval(t1);
