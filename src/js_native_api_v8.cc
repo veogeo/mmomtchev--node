@@ -885,7 +885,9 @@ napi_status napi_create_environment(napi_platform platform,
       "const internalLoader = new ESMLoader;"
       "const parent_path = require('url').pathToFileURL(process.argv[0]);"
       "global.import = (mod) => internalLoader.import(mod, parent_path, "
-      "Object.create(null));";
+      "Object.create(null));"
+      "global.import.meta = { url: parent_path };"
+      ;
 
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
