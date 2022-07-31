@@ -54,7 +54,20 @@ assert.strictEqual(
 
 assert.strictEqual(
   child_process.spawnSync(binary,
-                          ['function waitPromise(text)' +
-                          '{ return new Promise((res) => setTimeout(() => res(text + " with cheese"), 1)); }'])
+    ['function waitPromise(text)' +
+      '{ return new Promise((res) => setTimeout(() => res(text + " with cheese"), 1)); }'])
     .stdout.toString().trim(),
   'waited with cheese');
+
+assert.strictEqual(
+  child_process.spawnSync(binary,
+    ['function waitPromise(text)' +
+      '{ return new Promise((res, rej) => setTimeout(() => rej(text + " without cheese"), 1)); }'])
+    .stdout.toString().trim(),
+  'waited without cheese');
+
+assert.match(
+  child_process.spawnSync(binary,
+    ['0syntax_error'])
+    .stderr.toString().trim(),
+  /SyntaxError: Invalid or unexpected token/);
