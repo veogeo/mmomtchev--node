@@ -243,14 +243,21 @@ int waitMeWithCheese(napi_env env) {
       goto fail;
     }
 
-    if (napi_await_promise(env, promise, &result) != napi_ok) {
-      fprintf(stderr, "Failed awaiting promise\n");
+    napi_status r = napi_await_promise(env, promise, &result);
+    if (r != napi_ok && r != napi_pending_exception) {
+      fprintf(stderr, "Failed awaiting promise: %d\n", r);
       goto fail;
     }
 
-    napi_get_value_string_utf8(env, result, callback_buf, 32, &callback_buf_len);
-    if (strncmp(
-            callback_buf, "waited with cheese", strlen("waited with cheese"))) {
+    const char* expected;
+    if (r == napi_ok)
+      expected = "waited with cheese";
+    else
+      expected = "waited without cheese";
+
+    napi_get_value_string_utf8(
+        env, result, callback_buf, 32, &callback_buf_len);
+    if (strncmp(callback_buf, expected, strlen(expected))) {
       fprintf(stderr, "Invalid value received: %s\n", callback_buf);
       goto fail;
     }

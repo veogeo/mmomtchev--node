@@ -886,8 +886,7 @@ napi_status napi_create_environment(napi_platform platform,
       "const parent_path = require('url').pathToFileURL(process.argv[0]);"
       "global.import = (mod) => internalLoader.import(mod, parent_path, "
       "Object.create(null));"
-      "global.import.meta = { url: parent_path };"
-      ;
+      "global.import.meta = { url: parent_path };";
 
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
@@ -947,6 +946,11 @@ napi_status napi_run_environment(napi_env env) {
   return napi_ok;
 }
 
+static void napi_promise_error_handler(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  return;
+}
+
 napi_status napi_await_promise(napi_env env,
                                napi_value promise,
                                napi_value* result) {
@@ -961,17 +965,25 @@ napi_status napi_await_promise(napi_env env,
     return napi_invalid_arg;
   v8::Local<v8::Promise> promise_object = promise_value.As<v8::Promise>();
 
+  v8::Local<v8::Value> rejected = v8::Boolean::New(env->isolate, false);
+  v8::Local<v8::Function> err_handler =
+      v8::Function::New(env->context(), napi_promise_error_handler, rejected)
+          .ToLocalChecked();
+
+  promise_object->Catch(env->context(), err_handler);
+
   bool r = node::SpinEventLoopWithoutCleanup(
       node_env->node_env(), [&promise_object]() {
         return promise_object->State() == v8::Promise::PromiseState::kPending;
       });
 
   if (!r) return napi_closing;
-  if (promise_object->State() == v8::Promise::PromiseState::kRejected)
-    return napi_pending_exception;
 
   *result =
       v8impl::JsValueFromV8LocalValue(scope.Escape(promise_object->Result()));
+
+  if (promise_object->State() == v8::Promise::PromiseState::kRejected)
+    return napi_pending_exception;
   return napi_ok;
 }
 
