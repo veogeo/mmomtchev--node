@@ -6334,7 +6334,9 @@ napi_status napi_create_environment(napi_platform platform,
 * `[in] main_script`: Custom JavaScript main to run, NULL for an empty
   ready-to-use CJS/ES6 environment with `global.require()` and
   `global.import()` functions that resolve modules from the directory of
-  the compiled binary.
+  the compiled binary. The default bootstrap code can be obtained as a
+  NULL-terminated C-string from `napi_default_bootstrap()` in case it
+  needs to be extended.
 * `[out] result`: A `napi_env` result.
 
 Initialize a new environment. A single platform can hold multiple Node.js
@@ -6352,10 +6354,19 @@ added: REPLACEME
 napi_status napi_run_environment(napi_env env);
 ```
 
-* `[in] env`: environment handle.
+### `napi_default_bootstrap`
 
-Iterate the event loop of the environment, ensuring that all pending async
-callbacks have been executed.
+<!-- YAML
+added: REPLACEME
+-->
+
+> Stability: 1 - Experimental
+
+```c
+const char* napi_default_bootstrap();
+```
+
+Returns the default bootstrap code in case it needs to be extended.
 
 ### `napi_await_promise`
 
