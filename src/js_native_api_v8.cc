@@ -873,21 +873,25 @@ napi_status napi_destroy_platform(napi_platform platform) {
   return napi_ok;
 }
 
+const char* napi_default_bootstrap_text =
+    "const CJSLoader = require('internal/modules/cjs/loader');"
+    "global.module = new CJSLoader.Module();"
+    "global.require = require('module').createRequire(process.argv[0]);"
+    "const ESMLoader = require('internal/modules/esm/loader').ESMLoader;"
+    "const internalLoader = new ESMLoader;"
+    "const parent_path = require('url').pathToFileURL(process.argv[0]);"
+    "global.import = (mod) => internalLoader.import(mod, parent_path, "
+    "Object.create(null));"
+    "global.import.meta = { url: parent_path };";
+
+inline const char* napi_default_bootstrap() {
+  return napi_default_bootstrap_text;
+}
+
 napi_status napi_create_environment(napi_platform platform,
                                     char*** errors,
                                     const char* main_script,
                                     napi_env* result) {
-  static const char* default_main_script =
-      "const CJSLoader = require('internal/modules/cjs/loader');"
-      "global.module = new CJSLoader.Module();"
-      "global.require = require('module').createRequire(process.argv[0]);"
-      "const ESMLoader = require('internal/modules/esm/loader').ESMLoader;"
-      "const internalLoader = new ESMLoader;"
-      "const parent_path = require('url').pathToFileURL(process.argv[0]);"
-      "global.import = (mod) => internalLoader.import(mod, parent_path, "
-      "Object.create(null));"
-      "global.import.meta = { url: parent_path };";
-
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
 
@@ -899,8 +903,7 @@ napi_status napi_create_environment(napi_platform platform,
   }
   auto instance_data = new v8impl::EnvironmentInstanceData(std::move(setup));
 
-  if (main_script == nullptr)
-    main_script = default_main_script;
+  if (main_script == nullptr) main_script = napi_default_bootstrap();
 
   v8::MaybeLocal<v8::Value> loadenv_ret =
       node::LoadEnvironment(instance_data->setup()->env(), main_script);

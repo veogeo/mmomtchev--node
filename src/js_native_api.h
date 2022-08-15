@@ -120,6 +120,7 @@ NAPI_EXTERN napi_status napi_run_environment(napi_env env);
 NAPI_EXTERN napi_status napi_await_promise(napi_env env,
                                            napi_value promise,
                                            napi_value* result);
+NAPI_EXTERN const char* napi_default_bootstrap();
 #endif  // NAPI_EXPERIMENTAL
 
 NAPI_EXTERN napi_status napi_create_function(napi_env env,
