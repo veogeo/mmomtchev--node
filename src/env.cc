@@ -356,7 +356,8 @@ Environment::Environment(IsolateData* isolate_data,
       flags_(flags),
       thread_id_(thread_id.id == static_cast<uint64_t>(-1)
                      ? AllocateEnvironmentThreadId().id
-                     : thread_id.id) {
+                     : thread_id.id),
+      embedded_(nullptr) {
   // We'll be creating new objects so make sure we've entered the context.
   HandleScope handle_scope(isolate);
 

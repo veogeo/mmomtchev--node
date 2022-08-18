@@ -515,9 +515,6 @@ the currently running Agent which was set by means of a previous call to
 `napi_set_instance_data()` will be overwritten. If a `finalize_cb` was provided
 by the previous call, it will not be called.
 
-Should not be used in embedded Node.js on `napi_env` obtained from
-`napi_create_environment`.
-
 ### `napi_get_instance_data`
 
 <!-- YAML
@@ -6316,22 +6313,29 @@ added: REPLACEME
 napi_status napi_create_environment(napi_platform platform,
                                                char*** errors,
                                                const char* main_script,
+                                               napi_stdio stdio,
                                                napi_env* result);
 ```
 
 * `[in] platform`: platform handle.
 * `[in] errors`: If different than NULL, will receive an array of strings
   that must be freed.
-* `[in] main_script`: Custom JavaScript main to run, NULL for an empty
+* `[in] main_script`: If different than NULL, custom JavaScript to run in
+  addition to the default bootstrap that creates an empty
   ready-to-use CJS/ES6 environment with `global.require()` and
   `global.import()` functions that resolve modules from the directory of
-  the compiled binary. The default bootstrap code can be obtained as a
-  NULL-terminated C-string from `napi_default_bootstrap()` in case it
-  needs to be extended.
+  the compiled binary.
+* `[in] stdio`: Structure of three pointers to functions with
+  `read`/`write` semantics to be called for reading/writing from/to
+  `stdin`/`stdout`/`stderr`. The standard file descriptors will be used
+  if these are NULL, in which case they might get switched to
+  non-blocking mode.
 * `[out] result`: A `napi_env` result.
 
 Initialize a new environment. A single platform can hold multiple Node.js
-environments that will run in a separate V8 isolate each.
+environments that will run in a separate V8 isolate each. If the returned
+value is `napi_ok` or `napi_pending_exception`, the environment must be
+destroyed with `napi_destroy_environment` to free all allocated memory.
 
 ### `napi_run_environment`
 
@@ -6344,20 +6348,6 @@ added: REPLACEME
 ```c
 napi_status napi_run_environment(napi_env env);
 ```
-
-### `napi_default_bootstrap`
-
-<!-- YAML
-added: REPLACEME
--->
-
-> Stability: 1 - Experimental
-
-```c
-const char* napi_default_bootstrap();
-```
-
-Returns the default bootstrap code in case it needs to be extended.
 
 ### `napi_await_promise`
 

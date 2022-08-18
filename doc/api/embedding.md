@@ -178,7 +178,8 @@ An example can be found [in the Node.js source tree][napi_embedding.c].
     return -1;
   }
 
-  if (napi_create_environment(platform, NULL, main_script, &env) != napi_ok) {
+  if (napi_create_environment(platform, NULL, main_script,
+        (napi_stdio){NULL, NULL, NULL}, &env) != napi_ok) {
     fprintf(stderr, "Failed running JS\n");
     return -1;
   }

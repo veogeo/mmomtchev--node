@@ -5,23 +5,24 @@
 
 #define CHECK(op, msg)                                                         \
   if (op != napi_ok) {                                                         \
-    fprintf(stderr, "%s\n", msg);                                              \
+    fprintf(stderr, "Failed: %s\n", msg);                                              \
     return -1;                                                                 \
   }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   napi_platform platform;
 
   if (argc < 3) {
-      fprintf(stderr, "napi_modules <cjs.cjs> <es6.mjs>\n");
-      return -2;
+    fprintf(stderr, "napi_modules <cjs.cjs> <es6.mjs>\n");
+    return -2;
   }
 
   CHECK(napi_create_platform(0, NULL, 0, NULL, NULL, 0, &platform),
         "Failed creating the platform");
 
   napi_env env;
-  CHECK(napi_create_environment(platform, NULL, NULL, &env),
+  CHECK(napi_create_environment(
+            platform, NULL, NULL, (napi_stdio){NULL, NULL, NULL}, &env),
         "Failed running JS");
 
   napi_handle_scope scope;
@@ -51,7 +52,8 @@ int main(int argc, char *argv[]) {
 
   CHECK(napi_call_function(env, global, import, 1, &es6, &es6_promise),
         "import");
-  CHECK(napi_await_promise(env, es6_promise, &es6_module), "await");
+  napi_await_promise(env, es6_promise, &es6_module);
+  
   CHECK(napi_get_property(env, es6_module, value, &es6_result), "value");
   CHECK(napi_get_value_string_utf8(
             env, es6_result, buffer, sizeof(buffer), &bufferlen),

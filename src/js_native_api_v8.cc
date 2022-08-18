@@ -121,40 +121,124 @@ struct PlatformWrapper {
   std::vector<std::string> exec_args;
 };
 
-class EnvironmentInstanceData {
+class EmbeddedEnvironment : public node::EmbeddedEnvironment {
  public:
-  explicit EnvironmentInstanceData(
-      std::unique_ptr<node::CommonEnvironmentSetup>&& setup)
+  explicit EmbeddedEnvironment(
+      std::unique_ptr<node::CommonEnvironmentSetup>&& setup, napi_stdio stdio)
       : setup_(std::move(setup)),
-        locker(setup_->isolate()),
-        isolate_scope(setup_->isolate()),
-        handle_scope(setup_->isolate()),
-        context_scope(setup_->context()),
-        seal_scope(nullptr) {}
-  node::CommonEnvironmentSetup* setup() { return setup_.get(); }
+        locker_(setup_->isolate()),
+        isolate_scope_(setup_->isolate()),
+        handle_scope_(setup_->isolate()),
+        context_scope_(setup_->context()),
+        stdio_(stdio),
+        stdio_object_(),
+        seal_scope_(nullptr) {
+    auto env = setup_->env();
+    v8::HandleScope scope(env->isolate());
+    v8::Local<v8::Object> stdio_object = v8::Object::New(env->isolate());
+    if (stdio_.stdin_handler)
+      env->SetMethod(stdio_object, "stdin", stdin_handler);
+    if (stdio_.stdout_handler)
+      env->SetMethod(stdio_object, "stdout", stdout_handler);
+    if (stdio_.stderr_handler)
+      env->SetMethod(stdio_object, "stderr", stderr_handler);
+    stdio_object_.Reset(setup_->isolate(), stdio_object);
+  }
+
+  inline node::CommonEnvironmentSetup* setup() { return setup_.get(); }
   inline void seal() {
-    seal_scope =
+    seal_scope_ =
         std::make_unique<node::DebugSealHandleScope>(setup_->isolate());
+  }
+
+  inline v8::Local<v8::Object> stdio_object() {
+    v8::EscapableHandleScope scope(setup_->isolate());
+    return scope.Escape(stdio_object_.Get(setup_->isolate()));
   }
 
  private:
   std::unique_ptr<node::CommonEnvironmentSetup> setup_;
-  v8::Locker locker;
-  v8::Isolate::Scope isolate_scope;
-  v8::HandleScope handle_scope;
-  v8::Context::Scope context_scope;
+  v8::Locker locker_;
+  v8::Isolate::Scope isolate_scope_;
+  v8::HandleScope handle_scope_;
+  v8::Context::Scope context_scope_;
+  napi_stdio stdio_;
+  v8impl::Persistent<v8::Object> stdio_object_;
   // As this handle scope will remain open for the lifetime
   // of the environment, we seal it to prevent it from
   // becoming everyone's favorite trash bin
-  std::unique_ptr<node::DebugSealHandleScope> seal_scope;
+  std::unique_ptr<node::DebugSealHandleScope> seal_scope_;
+
+  static void stdin_handler(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void write_handler(const v8::FunctionCallbackInfo<v8::Value>& args,
+                            v8::Isolate* isolate,
+                            int (*handler)(const char*, size_t));
+  static void stdout_handler(const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void stderr_handler(const v8::FunctionCallbackInfo<v8::Value>& args);
 };
+
+void EmbeddedEnvironment::stdin_handler(
+    const v8::FunctionCallbackInfo<v8::Value>& args) {
+  auto env = node::Environment::GetCurrent(args);
+  auto isolate = env->isolate();
+  v8::Local<v8::Value> error_obj = v8::Exception::Error(
+      v8::String::NewFromUtf8(isolate, "stdin not implemented")
+          .ToLocalChecked());
+  isolate->ThrowException(error_obj);
+}
+
+void EmbeddedEnvironment::write_handler(
+    const v8::FunctionCallbackInfo<v8::Value>& args,
+    v8::Isolate* isolate,
+    int (*handler)(const char*, size_t)) {
+  if (args.Length() < 1 || !args[0]->IsString()) {
+    v8::Local<v8::Value> error_obj = v8::Exception::Error(
+        v8::String::NewFromUtf8(isolate, "Input is not a string")
+            .ToLocalChecked());
+    isolate->ThrowException(error_obj);
+  }
+
+  std::string buf = node::Utf8Value(isolate, args[0]).ToString();
+  int r = handler(buf.c_str(), buf.size());
+  args.GetReturnValue().Set(v8::Number::New(isolate, r));
+}
+
+void EmbeddedEnvironment::stdout_handler(
+    const v8::FunctionCallbackInfo<v8::Value>& args) {
+  auto env = node::Environment::GetCurrent(args);
+  auto isolate = env->isolate();
+  auto emb_env =
+      reinterpret_cast<v8impl::EmbeddedEnvironment*>(env->get_embedded());
+  if (emb_env == nullptr || emb_env->stdio_.stdout_handler == nullptr) {
+    v8::Local<v8::Value> error_obj = v8::Exception::Error(
+        v8::String::NewFromUtf8(isolate, "Not supported in this environment")
+            .ToLocalChecked());
+    isolate->ThrowException(error_obj);
+  }
+  write_handler(args, isolate, emb_env->stdio_.stdout_handler);
+}
+
+void EmbeddedEnvironment::stderr_handler(
+    const v8::FunctionCallbackInfo<v8::Value>& args) {
+  auto env = node::Environment::GetCurrent(args);
+  auto isolate = env->isolate();
+  auto emb_env =
+      reinterpret_cast<v8impl::EmbeddedEnvironment*>(env->get_embedded());
+  if (emb_env == nullptr || emb_env->stdio_.stderr_handler == nullptr) {
+    v8::Local<v8::Value> error_obj = v8::Exception::Error(
+        v8::String::NewFromUtf8(isolate, "Not supported in this environment")
+            .ToLocalChecked());
+    isolate->ThrowException(error_obj);
+  }
+  write_handler(args, isolate, emb_env->stdio_.stderr_handler);
+}
 
 class HandleScopeWrapper {
  public:
-  explicit HandleScopeWrapper(v8::Isolate* isolate) : scope(isolate) {}
+  explicit HandleScopeWrapper(v8::Isolate* isolate) : scope_(isolate) {}
 
  private:
-  v8::HandleScope scope;
+  v8::HandleScope scope_;
 };
 
 // In node v0.10 version of v8, there is no EscapableHandleScope and the
@@ -819,8 +903,7 @@ napi_status napi_get_last_error_info(napi_env env,
       for (const std::string& error : vec)                                     \
         fprintf(stderr, "%s\n", error.c_str());                                \
     } else {                                                                   \
-      *errors =                                                                \
-          reinterpret_cast<char**>(malloc(sizeof(char**) * (vec.size() + 1))); \
+      *errors = node::Malloc<char*>(vec.size() + 1);                           \
       if (errors == nullptr) return napi_generic_failure;                      \
       char** cur_error = *errors;                                              \
       for (const std::string& error : vec) {                                   \
@@ -873,24 +956,10 @@ napi_status napi_destroy_platform(napi_platform platform) {
   return napi_ok;
 }
 
-const char* napi_default_bootstrap_text =
-    "const CJSLoader = require('internal/modules/cjs/loader');"
-    "global.module = new CJSLoader.Module();"
-    "global.require = require('module').createRequire(process.argv[0]);"
-    "const ESMLoader = require('internal/modules/esm/loader').ESMLoader;"
-    "const internalLoader = new ESMLoader;"
-    "const parent_path = require('url').pathToFileURL(process.argv[0]);"
-    "global.import = (mod) => internalLoader.import(mod, parent_path, "
-    "Object.create(null));"
-    "global.import.meta = { url: parent_path };";
-
-inline const char* napi_default_bootstrap() {
-  return napi_default_bootstrap_text;
-}
-
 napi_status napi_create_environment(napi_platform platform,
                                     char*** errors,
                                     const char* main_script,
+                                    napi_stdio stdio,
                                     napi_env* result) {
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
@@ -901,24 +970,40 @@ napi_status napi_create_environment(napi_platform platform,
     HANDLE_ERRORS_VECTOR(errors, errors_vec);
     return napi_generic_failure;
   }
-  auto instance_data = new v8impl::EnvironmentInstanceData(std::move(setup));
-
-  if (main_script == nullptr) main_script = napi_default_bootstrap();
-
-  v8::MaybeLocal<v8::Value> loadenv_ret =
-      node::LoadEnvironment(instance_data->setup()->env(), main_script);
+  auto emb_env = new v8impl::EmbeddedEnvironment(std::move(setup), stdio);
 
   std::string filename =
       wrapper->args.size() > 1 ? wrapper->args[1] : "<internal>";
-  auto env__ = new node_napi_env__(instance_data->setup()->context(), filename);
-  env__->instance_data = reinterpret_cast<void*>(instance_data);
+  auto env__ = new node_napi_env__(emb_env->setup()->context(), filename);
+  emb_env->setup()->env()->set_embedded(emb_env);
   env__->node_env()->AddCleanupHook(
       [](void* arg) { static_cast<napi_env>(arg)->Unref(); },
       static_cast<void*>(env__));
-  *result = env__;
-  instance_data->seal();
 
-  if (loadenv_ret.IsEmpty()) return napi_pending_exception;
+  auto env = emb_env->setup()->env();
+  if (main_script == nullptr) main_script = "";
+
+  auto path = v8::String::NewFromUtf8(emb_env->setup()->isolate(),
+                                      env->exec_path().c_str())
+                  .ToLocalChecked();
+  std::vector<v8::Local<v8::String>> params = {env->process_string(),
+                                               env->require_string(),
+                                               env->stdio_string(),
+                                               env->path_string()};
+  std::vector<v8::Local<v8::Value>> args = {env->process_object(),
+                                            env->native_module_require(),
+                                            emb_env->stdio_object(),
+                                            path};
+  auto ret = node::ExecuteBootstrapper(
+      env, "internal/bootstrap/switches/is_embedded_env", &params, &args);
+  if (ret.IsEmpty()) return napi_pending_exception;
+
+  ret = node::LoadEnvironment(env, main_script);
+  if (ret.IsEmpty()) return napi_pending_exception;
+
+  *result = env__;
+  emb_env->seal();
+
   return napi_ok;
 }
 
@@ -929,12 +1014,13 @@ napi_status napi_destroy_environment(napi_env env, int* exit_code) {
   int r = node::SpinEventLoop(node_env->node_env()).FromMaybe(1);
   if (exit_code != nullptr) *exit_code = r;
   node::Stop(node_env->node_env());
-  auto instance_data = reinterpret_cast<v8impl::EnvironmentInstanceData*>(
-      node_env->instance_data);
 
+  auto emb_env = reinterpret_cast<v8impl::EmbeddedEnvironment*>(
+      node_env->node_env()->get_embedded());
+  node_env->node_env()->set_embedded(nullptr);
   // This deletes the uniq_ptr to node::CommonEnvironmentSetup
   // and the v8::locker
-  delete instance_data;
+  delete emb_env;
 
   return napi_ok;
 }
@@ -973,7 +1059,8 @@ napi_status napi_await_promise(napi_env env,
       v8::Function::New(env->context(), napi_promise_error_handler, rejected)
           .ToLocalChecked();
 
-  promise_object->Catch(env->context(), err_handler);
+  if (promise_object->Catch(env->context(), err_handler).IsEmpty())
+    return napi_pending_exception;
 
   bool r = node::SpinEventLoopWithoutCleanup(
       node_env->node_env(), [&promise_object]() {

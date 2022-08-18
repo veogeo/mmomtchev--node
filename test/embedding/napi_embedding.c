@@ -8,7 +8,7 @@
 // Note: This file is being referred to from doc/api/embedding.md, and excerpts
 // from it are included in the documentation. Try to keep these in sync.
 
-static int RunNodeInstance(napi_platform platform);
+static int RunNodeInstance(napi_platform platform, napi_stdio stdio);
 
 const char* main_script =
     "const publicRequire ="
@@ -23,14 +23,26 @@ const char* main_script =
     goto fail;                                                                 \
   }
 
+int stdout_handler(const char* buf, size_t len) {
+  printf("[stdout] (%lu) %s", (unsigned long)len, buf);
+
+  return len;
+}
+
 int main(int argc, char** argv) {
   napi_platform platform;
-  napi_status r;
 
   CHECK(napi_create_platform(argc, argv, 0, NULL, NULL, 0, &platform),
         "Failed creating the platform");
 
-  int exit_code = RunNodeInstance(platform);
+  napi_stdio stdio = (napi_stdio) {
+    NULL, NULL, NULL
+  };
+  if (argc > 2 && !strcmp(argv[2], "redirect")) {
+    stdio = (napi_stdio){NULL, stdout_handler, NULL};
+  }
+
+  int exit_code = RunNodeInstance(platform, stdio);
 
   CHECK(napi_destroy_platform(platform), "Failed destroying the platform");
 
@@ -240,12 +252,11 @@ fail:
   return -1;
 }
 
-int RunNodeInstance(napi_platform platform) {
-  napi_status r;
+int RunNodeInstance(napi_platform platform, napi_stdio stdio) {
   napi_env env;
   int exit_code;
 
-  CHECK(napi_create_environment(platform, NULL, main_script, &env),
+  CHECK(napi_create_environment(platform, NULL, main_script, stdio, &env),
         "Failed running JS");
 
   if (callMe(env) != 0) exit_code = -1;

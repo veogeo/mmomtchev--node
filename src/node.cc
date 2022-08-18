@@ -369,15 +369,17 @@ MaybeLocal<Value> Environment::BootstrapNode() {
     return scope.EscapeMaybe(result);
   }
 
-  // TODO(joyeecheung): skip these in the snapshot building for workers.
-  auto thread_switch_id =
-      is_main_thread() ? "internal/bootstrap/switches/is_main_thread"
-                       : "internal/bootstrap/switches/is_not_main_thread";
-  result =
-      ExecuteBootstrapper(this, thread_switch_id, &node_params, &node_args);
+  if (!is_embedded_env()) {
+    // TODO(joyeecheung): skip these in the snapshot building for workers.
+    auto thread_switch_id =
+        is_main_thread() ? "internal/bootstrap/switches/is_main_thread"
+                         : "internal/bootstrap/switches/is_not_main_thread";
+    result =
+        ExecuteBootstrapper(this, thread_switch_id, &node_params, &node_args);
 
-  if (result.IsEmpty()) {
-    return scope.EscapeMaybe(result);
+    if (result.IsEmpty()) {
+      return scope.EscapeMaybe(result);
+    }
   }
 
   auto process_state_switch_id =
