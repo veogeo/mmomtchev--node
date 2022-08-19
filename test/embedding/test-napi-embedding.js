@@ -7,6 +7,8 @@ const path = require('path');
 
 common.allowGlobals(global.require);
 common.allowGlobals(global.embedVars);
+common.allowGlobals(global.import);
+common.allowGlobals(global.module);
 let binary = `out/${common.buildType}/napi_embedding`;
 if (common.isWindows) {
   binary += '.exe';
