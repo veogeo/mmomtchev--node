@@ -124,36 +124,18 @@ struct PlatformWrapper {
 class EmbeddedEnvironment : public node::EmbeddedEnvironment {
  public:
   explicit EmbeddedEnvironment(
-      std::unique_ptr<node::CommonEnvironmentSetup>&& setup, napi_stdio stdio)
+      std::unique_ptr<node::CommonEnvironmentSetup>&& setup)
       : setup_(std::move(setup)),
         locker_(setup_->isolate()),
         isolate_scope_(setup_->isolate()),
         handle_scope_(setup_->isolate()),
         context_scope_(setup_->context()),
-        stdio_(stdio),
-        stdio_object_(),
-        seal_scope_(nullptr) {
-    auto env = setup_->env();
-    v8::HandleScope scope(env->isolate());
-    v8::Local<v8::Object> stdio_object = v8::Object::New(env->isolate());
-    if (stdio_.stdin_handler)
-      env->SetMethod(stdio_object, "stdin", stdin_handler);
-    if (stdio_.stdout_handler)
-      env->SetMethod(stdio_object, "stdout", stdout_handler);
-    if (stdio_.stderr_handler)
-      env->SetMethod(stdio_object, "stderr", stderr_handler);
-    stdio_object_.Reset(setup_->isolate(), stdio_object);
-  }
+        seal_scope_(nullptr) {}
 
   inline node::CommonEnvironmentSetup* setup() { return setup_.get(); }
   inline void seal() {
     seal_scope_ =
         std::make_unique<node::DebugSealHandleScope>(setup_->isolate());
-  }
-
-  inline v8::Local<v8::Object> stdio_object() {
-    v8::EscapableHandleScope scope(setup_->isolate());
-    return scope.Escape(stdio_object_.Get(setup_->isolate()));
   }
 
  private:
@@ -162,76 +144,11 @@ class EmbeddedEnvironment : public node::EmbeddedEnvironment {
   v8::Isolate::Scope isolate_scope_;
   v8::HandleScope handle_scope_;
   v8::Context::Scope context_scope_;
-  napi_stdio stdio_;
-  v8impl::Persistent<v8::Object> stdio_object_;
   // As this handle scope will remain open for the lifetime
   // of the environment, we seal it to prevent it from
   // becoming everyone's favorite trash bin
   std::unique_ptr<node::DebugSealHandleScope> seal_scope_;
-
-  static void stdin_handler(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void write_handler(const v8::FunctionCallbackInfo<v8::Value>& args,
-                            v8::Isolate* isolate,
-                            int (*handler)(const char*, size_t));
-  static void stdout_handler(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void stderr_handler(const v8::FunctionCallbackInfo<v8::Value>& args);
 };
-
-void EmbeddedEnvironment::stdin_handler(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  auto env = node::Environment::GetCurrent(args);
-  auto isolate = env->isolate();
-  v8::Local<v8::Value> error_obj = v8::Exception::Error(
-      v8::String::NewFromUtf8(isolate, "stdin not implemented")
-          .ToLocalChecked());
-  isolate->ThrowException(error_obj);
-}
-
-void EmbeddedEnvironment::write_handler(
-    const v8::FunctionCallbackInfo<v8::Value>& args,
-    v8::Isolate* isolate,
-    int (*handler)(const char*, size_t)) {
-  if (args.Length() < 1 || !args[0]->IsString()) {
-    v8::Local<v8::Value> error_obj = v8::Exception::Error(
-        v8::String::NewFromUtf8(isolate, "Input is not a string")
-            .ToLocalChecked());
-    isolate->ThrowException(error_obj);
-  }
-
-  std::string buf = node::Utf8Value(isolate, args[0]).ToString();
-  int r = handler(buf.c_str(), buf.size());
-  args.GetReturnValue().Set(v8::Number::New(isolate, r));
-}
-
-void EmbeddedEnvironment::stdout_handler(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  auto env = node::Environment::GetCurrent(args);
-  auto isolate = env->isolate();
-  auto emb_env =
-      reinterpret_cast<v8impl::EmbeddedEnvironment*>(env->get_embedded());
-  if (emb_env == nullptr || emb_env->stdio_.stdout_handler == nullptr) {
-    v8::Local<v8::Value> error_obj = v8::Exception::Error(
-        v8::String::NewFromUtf8(isolate, "Not supported in this environment")
-            .ToLocalChecked());
-    isolate->ThrowException(error_obj);
-  }
-  write_handler(args, isolate, emb_env->stdio_.stdout_handler);
-}
-
-void EmbeddedEnvironment::stderr_handler(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  auto env = node::Environment::GetCurrent(args);
-  auto isolate = env->isolate();
-  auto emb_env =
-      reinterpret_cast<v8impl::EmbeddedEnvironment*>(env->get_embedded());
-  if (emb_env == nullptr || emb_env->stdio_.stderr_handler == nullptr) {
-    v8::Local<v8::Value> error_obj = v8::Exception::Error(
-        v8::String::NewFromUtf8(isolate, "Not supported in this environment")
-            .ToLocalChecked());
-    isolate->ThrowException(error_obj);
-  }
-  write_handler(args, isolate, emb_env->stdio_.stderr_handler);
-}
 
 class HandleScopeWrapper {
  public:
@@ -959,7 +876,6 @@ napi_status napi_destroy_platform(napi_platform platform) {
 napi_status napi_create_environment(napi_platform platform,
                                     char*** errors,
                                     const char* main_script,
-                                    napi_stdio stdio,
                                     napi_env* result) {
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
@@ -970,7 +886,7 @@ napi_status napi_create_environment(napi_platform platform,
     HANDLE_ERRORS_VECTOR(errors, errors_vec);
     return napi_generic_failure;
   }
-  auto emb_env = new v8impl::EmbeddedEnvironment(std::move(setup), stdio);
+  auto emb_env = new v8impl::EmbeddedEnvironment(std::move(setup));
 
   std::string filename =
       wrapper->args.size() > 1 ? wrapper->args[1] : "<internal>";
@@ -988,11 +904,9 @@ napi_status napi_create_environment(napi_platform platform,
                   .ToLocalChecked();
   std::vector<v8::Local<v8::String>> params = {env->process_string(),
                                                env->require_string(),
-                                               env->stdio_string(),
                                                env->path_string()};
   std::vector<v8::Local<v8::Value>> args = {env->process_object(),
                                             env->native_module_require(),
-                                            emb_env->stdio_object(),
                                             path};
   auto ret = node::ExecuteBootstrapper(
       env, "internal/bootstrap/switches/is_embedded_env", &params, &args);

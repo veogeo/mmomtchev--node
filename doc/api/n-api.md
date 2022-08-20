@@ -6313,7 +6313,6 @@ added: REPLACEME
 napi_status napi_create_environment(napi_platform platform,
                                                char*** errors,
                                                const char* main_script,
-                                               napi_stdio stdio,
                                                napi_env* result);
 ```
 
@@ -6325,11 +6324,8 @@ napi_status napi_create_environment(napi_platform platform,
   ready-to-use CJS/ES6 environment with `global.require()` and
   `global.import()` functions that resolve modules from the directory of
   the compiled binary.
-* `[in] stdio`: Structure of three pointers to functions with
-  `read`/`write` semantics to be called for reading/writing from/to
-  `stdin`/`stdout`/`stderr`. The standard file descriptors will be used
-  if these are NULL, in which case they might get switched to
-  non-blocking mode.
+  It can be used to redirect `process.stdin`/ `process.stdout` streams
+  since Node.js might switch these file descriptors to non-blocking mode.
 * `[out] result`: A `napi_env` result.
 
 Initialize a new environment. A single platform can hold multiple Node.js

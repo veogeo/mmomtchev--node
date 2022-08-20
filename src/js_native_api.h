@@ -103,12 +103,7 @@ node_api_symbol_for(napi_env env,
                     const char* utf8description,
                     size_t length,
                     napi_value* result);
-struct napi_stdio_struct {
-  int (*stdin_handler)(char*, size_t);
-  int (*stdout_handler)(const char*, size_t);
-  int (*stderr_handler)(const char*, size_t);
-};
-typedef struct napi_stdio_struct napi_stdio;
+
 NAPI_EXTERN napi_status napi_create_platform(int argc,
                                              char** argv,
                                              int exec_argc,
@@ -120,7 +115,6 @@ NAPI_EXTERN napi_status napi_destroy_platform(napi_platform platform);
 NAPI_EXTERN napi_status napi_create_environment(napi_platform platform,
                                                 char*** errors,
                                                 const char* main_script,
-                                                napi_stdio stdio,
                                                 napi_env* result);
 NAPI_EXTERN napi_status napi_destroy_environment(napi_env env, int* exit_code);
 NAPI_EXTERN napi_status napi_run_environment(napi_env env);
