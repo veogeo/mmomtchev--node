@@ -21,8 +21,7 @@ int main(int argc, char* argv[]) {
         "Failed creating the platform");
 
   napi_env env;
-  CHECK(napi_create_environment(
-            platform, NULL, NULL, (napi_stdio){NULL, NULL, NULL}, &env),
+  CHECK(napi_create_environment(platform, NULL, NULL, &env),
         "Failed running JS");
 
   napi_handle_scope scope;
