@@ -25,7 +25,6 @@ const char* main_script =
 
 int main(int argc, char** argv) {
   napi_platform platform;
-  napi_status r;
 
   CHECK(napi_create_platform(argc, argv, 0, NULL, NULL, 0, &platform),
         "Failed creating the platform");
@@ -241,7 +240,6 @@ fail:
 }
 
 int RunNodeInstance(napi_platform platform) {
-  napi_status r;
   napi_env env;
   int exit_code;
 
