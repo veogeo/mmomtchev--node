@@ -68,12 +68,6 @@ assert.strictEqual(
     .stdout.toString().trim(),
   'waited without cheese');
 
-assert.strictEqual(
-  child_process.spawnSync(binary,
-                          ['console.log("hello from the stdout handler")', 'redirect'])
-    .stdout.toString().trim(),
-  '[stdout] (30) hello from the stdout handler');
-
 assert.match(
   child_process.spawnSync(binary,
                           ['0syntax_error'])
