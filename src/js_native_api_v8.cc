@@ -2,10 +2,12 @@
 #include <climits>  // INT_MAX
 #include <cmath>
 #define NAPI_EXPERIMENTAL
+#define NAPI_EMBEDDING
 #include "env-inl.h"
 #include "js_native_api.h"
 #include "js_native_api_v8.h"
 #include "node_api_internals.h"
+#include "node_snapshot_builder.h"
 #include "util-inl.h"
 
 #define CHECK_MAYBE_NOTHING(env, maybe, status)                                \
@@ -882,8 +884,20 @@ napi_status NAPI_CDECL napi_create_environment(napi_platform platform,
   auto wrapper = reinterpret_cast<v8impl::PlatformWrapper*>(platform);
   std::vector<std::string> errors_vec;
 
+  bool use_node_snapshot = node::per_process::cli_options->per_isolate->node_snapshot;
+  const node::SnapshotData* snapshot_data =
+      use_node_snapshot ? node::SnapshotBuilder::GetEmbeddedSnapshotData() : nullptr;
+
   auto setup = node::CommonEnvironmentSetup::Create(
-      wrapper->platform.get(), &errors_vec, wrapper->args, wrapper->exec_args);
+      wrapper->platform.get(),
+      &errors_vec,
+      wrapper->args,
+      wrapper->exec_args,
+      node::EnvironmentFlags::kDefaultFlags,
+      node::ThreadId(),
+      std::make_unique<node::InspectorParentHandle>(),
+      snapshot_data);
+      
   if (setup == nullptr) {
     HANDLE_ERRORS_VECTOR(errors, errors_vec);
     return napi_generic_failure;

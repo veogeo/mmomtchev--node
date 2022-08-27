@@ -4,6 +4,7 @@
 #include "node_internals.h"
 #include "node_native_module_env.h"
 #include "node_platform.h"
+#include "node_snapshot_builder.h"
 #include "node_v8_platform-inl.h"
 #include "uv.h"
 
@@ -279,9 +280,14 @@ void SetIsolateUpForNode(v8::Isolate* isolate) {
 // careful about what we override in the params.
 Isolate* NewIsolate(Isolate::CreateParams* params,
                     uv_loop_t* event_loop,
-                    MultiIsolatePlatform* platform) {
+                    MultiIsolatePlatform* platform,
+                    const SnapshotData* snapshot_data) {
   Isolate* isolate = Isolate::Allocate();
   if (isolate == nullptr) return nullptr;
+
+  if (snapshot_data != nullptr) {
+    SnapshotBuilder::InitializeIsolateParams(snapshot_data, params);
+  }
 
   // Register the isolate on the platform before the isolate gets initialized,
   // so that the isolate can access the platform during initialization.
@@ -296,25 +302,34 @@ Isolate* NewIsolate(Isolate::CreateParams* params,
 
 Isolate* NewIsolate(ArrayBufferAllocator* allocator,
                     uv_loop_t* event_loop,
-                    MultiIsolatePlatform* platform) {
+                    MultiIsolatePlatform* platform,
+                    const SnapshotData *snapshot_data) {
   Isolate::CreateParams params;
   if (allocator != nullptr) params.array_buffer_allocator = allocator;
-  return NewIsolate(&params, event_loop, platform);
+  return NewIsolate(&params, event_loop, platform, snapshot_data);
 }
 
 Isolate* NewIsolate(std::shared_ptr<ArrayBufferAllocator> allocator,
                     uv_loop_t* event_loop,
-                    MultiIsolatePlatform* platform) {
+                    MultiIsolatePlatform* platform,
+                    const SnapshotData *snapshot_data) {
   Isolate::CreateParams params;
   if (allocator) params.array_buffer_allocator_shared = allocator;
-  return NewIsolate(&params, event_loop, platform);
+  return NewIsolate(&params, event_loop, platform, snapshot_data);
 }
 
 IsolateData* CreateIsolateData(Isolate* isolate,
                                uv_loop_t* loop,
                                MultiIsolatePlatform* platform,
-                               ArrayBufferAllocator* allocator) {
-  return new IsolateData(isolate, loop, platform, allocator);
+                               ArrayBufferAllocator* allocator,
+                               const SnapshotData* snapshot_data) {
+  return new IsolateData(isolate,
+                         loop,
+                         platform,
+                         allocator,
+                         snapshot_data == nullptr
+                             ? nullptr
+                             : &(snapshot_data->isolate_data_indices));
 }
 
 void FreeIsolateData(IsolateData* isolate_data) {
@@ -341,14 +356,21 @@ Environment* CreateEnvironment(
     const std::vector<std::string>& exec_args,
     EnvironmentFlags::Flags flags,
     ThreadId thread_id,
-    std::unique_ptr<InspectorParentHandle> inspector_parent_handle) {
+    std::unique_ptr<InspectorParentHandle> inspector_parent_handle,
+    const SnapshotData* snapshot_data) {
   Isolate* isolate = context->GetIsolate();
   HandleScope handle_scope(isolate);
   Context::Scope context_scope(context);
   // TODO(addaleax): This is a much better place for parsing per-Environment
   // options than the global parse call.
   Environment* env = new Environment(
-      isolate_data, context, args, exec_args, nullptr, flags, thread_id);
+      isolate_data,
+      context,
+      args,
+      exec_args,
+      snapshot_data != nullptr ? &(snapshot_data->env_info) : nullptr,
+      flags,
+      thread_id);
 #if HAVE_INSPECTOR
   if (env->should_create_inspector()) {
     if (inspector_parent_handle) {
@@ -361,9 +383,11 @@ Environment* CreateEnvironment(
   }
 #endif
 
-  if (env->RunBootstrapping().IsEmpty()) {
-    FreeEnvironment(env);
-    return nullptr;
+  if (snapshot_data == nullptr) {
+    if (env->RunBootstrapping().IsEmpty()) {
+      FreeEnvironment(env);
+      return nullptr;
+    }
   }
 
   return env;

@@ -25,6 +25,7 @@
     'node_shared_openssl%': 'false',
     'node_v8_options%': '',
     'node_core_target_name%': 'node',
+    'node_lib_nosnapshot_target_name%': 'libnode_nosnapshot',
     'node_lib_target_name%': 'libnode',
     'node_intermediate_lib_type%': 'static_library',
     'node_builtin_modules_path%': '',
@@ -201,7 +202,7 @@
           # shared lib and then executable.
           'dependencies': [ 'node_aix_shared' ],
         }, {
-          'dependencies': [ '<(node_lib_target_name)' ],
+          'dependencies': [ '<(node_lib_nosnapshot_target_name)' ],
           'conditions': [
             ['OS=="win" and node_shared=="true"', {
               'dependencies': ['generate_node_def'],
@@ -223,7 +224,7 @@
           'msvs_settings': {
             'VCLinkerTool': {
               'AdditionalOptions': [
-                '/WHOLEARCHIVE:<(node_lib_target_name)<(STATIC_LIB_SUFFIX)',
+                '/WHOLEARCHIVE:<(node_lib_nosnapshot_target_name)<(STATIC_LIB_SUFFIX)',
                 '/WHOLEARCHIVE:<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)',
               ],
             },
@@ -337,47 +338,10 @@
         }],
         ['node_use_node_snapshot=="true"', {
           'dependencies': [
-            'node_mksnapshot',
+            'node_snapshot.cc',
           ],
-          'conditions': [
-            ['node_snapshot_main!=""', {
-              'actions': [
-                {
-                  'action_name': 'node_mksnapshot',
-                  'process_outputs_as_sources': 1,
-                  'inputs': [
-                    '<(node_mksnapshot_exec)',
-                    '<(node_snapshot_main)',
-                  ],
-                  'outputs': [
-                    '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
-                  ],
-                  'action': [
-                    '<(node_mksnapshot_exec)',
-                    '--build-snapshot',
-                    '<(node_snapshot_main)',
-                    '<@(_outputs)',
-                  ],
-                },
-              ],
-            }, {
-              'actions': [
-                {
-                  'action_name': 'node_mksnapshot',
-                  'process_outputs_as_sources': 1,
-                  'inputs': [
-                    '<(node_mksnapshot_exec)',
-                  ],
-                  'outputs': [
-                    '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
-                  ],
-                  'action': [
-                    '<@(_inputs)',
-                    '<@(_outputs)',
-                  ],
-                },
-              ],
-            }],
+          'sources': [
+            '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
           ],
           }, {
           'sources': [
@@ -394,8 +358,8 @@
       ],
     }, # node_core_target_name
     {
-      'target_name': '<(node_lib_target_name)',
-      'type': '<(node_intermediate_lib_type)',
+      'target_name': '<(node_lib_nosnapshot_target_name)',
+      'type': 'static_library',
       'includes': [
         'node.gypi',
       ],
@@ -655,12 +619,6 @@
         [ 'node_builtin_modules_path!=""', {
           'defines': [ 'NODE_BUILTIN_MODULES_PATH="<(node_builtin_modules_path)"' ]
         }],
-        [ 'node_shared=="true"', {
-          'sources': [
-            'src/node_snapshot_stub.cc',
-            'src/node_code_cache_stub.cc',
-          ]
-        }],
         [ 'node_shared=="true" and node_module_version!="" and OS!="win"', {
           'product_extension': '<(shlib_suffix)',
           'xcode_settings': {
@@ -890,7 +848,92 @@
           ],
         },
       ],
+    }, # node_lib_nosnapshot_target_name
+    {
+      'target_name': '<(node_lib_target_name)',
+      'type': '<(node_intermediate_lib_type)',
+      'includes': [
+        'node.gypi',
+      ],
+      'include_dirs': [
+        'src'
+      ],
+      'dependencies': [
+        '<(node_lib_nosnapshot_target_name)',
+      ],
+      'defines': [
+        'NODE_WANT_INTERNALS=1'
+      ],
+      'conditions': [
+        ['node_use_node_snapshot=="true"', {
+          'dependencies': [
+            'node_snapshot.cc',
+          ],
+          'sources': [
+            '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
+          ],
+          }, {
+          'sources': [
+            'src/node_snapshot_stub.cc'
+          ],
+        }]
+      ]
     }, # node_lib_target_name
+    {
+      'target_name': 'node_snapshot.cc',
+      'type': 'none',
+      'conditions': [
+        ['node_use_node_snapshot=="true"', {
+          'dependencies': [
+            'node_mksnapshot',
+          ],
+          'conditions': [
+            ['node_snapshot_main!=""', {
+              'actions': [
+                {
+                  'action_name': 'node_mksnapshot',
+                  'process_outputs_as_sources': 1,
+                  'inputs': [
+                    '<(node_mksnapshot_exec)',
+                    '<(node_snapshot_main)',
+                  ],
+                  'outputs': [
+                    '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
+                  ],
+                  'action': [
+                    '<(node_mksnapshot_exec)',
+                    '--build-snapshot',
+                    '<(node_snapshot_main)',
+                    '<@(_outputs)',
+                  ],
+                },
+              ],
+            }, {
+              'actions': [
+                {
+                  'action_name': 'node_mksnapshot',
+                  'process_outputs_as_sources': 1,
+                  'inputs': [
+                    '<(node_mksnapshot_exec)',
+                  ],
+                  'outputs': [
+                    '<(SHARED_INTERMEDIATE_DIR)/node_snapshot.cc',
+                  ],
+                  'action': [
+                    '<@(_inputs)',
+                    '<@(_outputs)',
+                  ],
+                },
+              ],
+            }],
+          ],
+          }, {
+          'sources': [
+            'src/node_snapshot_stub.cc'
+          ],
+        }]
+      ]
+    }, # node_snapshot.cc
     {
        # generate ETW header and resource files
       'target_name': 'node_etw',
@@ -949,10 +992,10 @@
             {
               'action_name': 'node_dtrace_provider_o',
               'inputs': [
-                '<(obj_dir)/<(node_lib_target_name)/src/node_dtrace.o',
+                '<(obj_dir)/<(node_lib_nosnapshot_target_name)/src/node_dtrace.o',
               ],
               'outputs': [
-                '<(obj_dir)/<(node_lib_target_name)/src/node_dtrace_provider.o'
+                '<(obj_dir)/<(node_lib_nosnapshot_target_name)/src/node_dtrace_provider.o'
               ],
               'action': [ 'dtrace', '-G', '-xnolibs', '-s', 'src/node_provider.d',
                 '<@(_inputs)', '-o', '<@(_outputs)' ]
@@ -1002,7 +1045,7 @@
                 '<(SHARED_INTERMEDIATE_DIR)/v8constants.h'
               ],
               'outputs': [
-                '<(obj_dir)/<(node_lib_target_name)/src/node_dtrace_ustack.o'
+                '<(obj_dir)/<(node_lib_nosnapshot_target_name)/src/node_dtrace_ustack.o'
               ],
               'conditions': [
                 [ 'target_arch=="ia32" or target_arch=="arm"', {
@@ -1053,7 +1096,7 @@
       'target_name': 'fuzz_url',
       'type': 'executable',
       'dependencies': [
-        '<(node_lib_target_name)',
+        '<(node_lib_nosnapshot_target_name)',
       ],
       'includes': [
         'node.gypi'
@@ -1085,7 +1128,7 @@
       'target_name': 'fuzz_env',
       'type': 'executable',
       'dependencies': [
-        '<(node_lib_target_name)',
+        '<(node_lib_nosnapshot_target_name)',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
         'node_dtrace_header',
@@ -1129,7 +1172,7 @@
       'type': 'executable',
 
       'dependencies': [
-        '<(node_lib_target_name)',
+        '<(node_lib_nosnapshot_target_name)',
         'deps/googletest/googletest.gyp:gtest',
         'deps/googletest/googletest.gyp:gtest_main',
         'deps/histogram/histogram.gyp:histogram',
@@ -1230,7 +1273,7 @@
       'type': 'executable',
 
       'dependencies': [
-        '<(node_lib_target_name)',
+        '<(node_lib_nosnapshot_target_name)',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
         'node_dtrace_header',
@@ -1309,7 +1352,6 @@
       ],
 
       'sources': [
-        'src/node_snapshot_stub.cc',
         'src/node_code_cache_stub.cc',
         'test/embedding/napi_embedding.c',
       ],
@@ -1365,7 +1407,6 @@
       ],
 
       'sources': [
-        'src/node_snapshot_stub.cc',
         'src/node_code_cache_stub.cc',
         'test/embedding/napi_modules.c',
       ],
@@ -1422,7 +1463,7 @@
       'type': 'executable',
 
       'dependencies': [
-        '<(node_lib_target_name)',
+        '<(node_lib_nosnapshot_target_name)',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
       ],
@@ -1477,7 +1518,7 @@
       'type': 'executable',
 
       'dependencies': [
-        '<(node_lib_target_name)',
+        '<(node_lib_nosnapshot_target_name)',
         'deps/histogram/histogram.gyp:histogram',
         'deps/uvwasi/uvwasi.gyp:uvwasi',
       ],
@@ -1537,7 +1578,7 @@
           'includes': [
             'node.gypi'
           ],
-          'dependencies': ['<(node_lib_target_name)'],
+          'dependencies': ['<(node_lib_nosnapshot_target_name)'],
           'include_dirs': [
             'src',
             'deps/v8/include',
@@ -1566,14 +1607,14 @@
          'target_name': 'generate_node_def',
          'dependencies': [
            'gen_node_def',
-           '<(node_lib_target_name)',
+           '<(node_lib_nosnapshot_target_name)',
          ],
          'type': 'none',
          'actions': [
            {
              'action_name': 'generate_node_def_action',
              'inputs': [
-               '<(PRODUCT_DIR)/<(node_lib_target_name).dll'
+               '<(PRODUCT_DIR)/<(node_lib_nosnapshot_target_name).dll'
              ],
              'outputs': [
                '<(PRODUCT_DIR)/<(node_core_target_name).def',

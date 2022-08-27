@@ -1,6 +1,7 @@
 #include "debug_utils-inl.h"
 #include "env-inl.h"
 #include "node.h"
+#include "node_snapshot_builder.h"
 
 using v8::Context;
 using v8::Function;
@@ -134,26 +135,60 @@ CommonEnvironmentSetup::CommonEnvironmentSetup(
   }
   loop->data = this;
 
+  // Alas, this must remain duplicated for the time being with the code
+  // in napi_create_environment in order to avoid changing the APIs
+  bool use_node_snapshot =
+      node::per_process::cli_options->per_isolate->node_snapshot;
+  const node::SnapshotData* snapshot_data =
+      use_node_snapshot ? node::SnapshotBuilder::GetEmbeddedSnapshotData()
+                        : nullptr;
+
   impl_->allocator = ArrayBufferAllocator::Create();
-  impl_->isolate = NewIsolate(impl_->allocator, &impl_->loop, platform);
+  impl_->isolate =
+      NewIsolate(impl_->allocator, &impl_->loop, platform, snapshot_data);
   Isolate* isolate = impl_->isolate;
 
   {
     Locker locker(isolate);
     Isolate::Scope isolate_scope(isolate);
-    impl_->isolate_data.reset(
-        CreateIsolateData(isolate, loop, platform, impl_->allocator.get()));
+    impl_->isolate_data.reset(CreateIsolateData(
+        isolate, loop, platform, impl_->allocator.get(), snapshot_data));
 
     HandleScope handle_scope(isolate);
-    Local<Context> context = NewContext(isolate);
-    impl_->context.Reset(isolate, context);
-    if (context.IsEmpty()) {
-      errors->push_back("Failed to initialize V8 Context");
-      return;
-    }
+    Local<Context> context;
 
-    Context::Scope context_scope(context);
-    impl_->env.reset(make_env(this));
+    if (snapshot_data == nullptr) {
+      context = NewContext(isolate);
+      impl_->context.Reset(isolate, context);
+      if (context.IsEmpty()) {
+        errors->push_back("Failed to initialize V8 Context");
+        return;
+      }
+
+      Context::Scope context_scope(context);
+      impl_->env.reset(make_env(this));
+    } else {
+      impl_->env.reset(make_env(this));
+      context = Context::FromSnapshot(
+                    isolate,
+                    node::NodeMainInstance::kNodeContextIndex,
+                    {DeserializeNodeInternalFields, impl_->env.get()})
+                    .ToLocalChecked();
+
+      if (context.IsEmpty()) {
+        errors->push_back("Failed to initialize V8 Context");
+        return;
+      }
+
+      Context::Scope context_scope(context);
+      if (!InitializeContextRuntime(context).IsJust()) {
+        errors->push_back("Failed to initialize V8 Context Runtime");
+        return;
+      }
+      SetIsolateErrorHandlers(isolate, {});
+      impl_->env->InitializeMainContext(context, &(snapshot_data->env_info));
+      impl_->env->DoneBootstrapping();
+    }
   }
 }
 
