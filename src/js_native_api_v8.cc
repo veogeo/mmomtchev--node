@@ -830,8 +830,8 @@ napi_status NAPI_CDECL napi_create_environment(napi_platform platform,
       env->primordials(),
       path};
 
-  auto ret = node::ExecuteBootstrapper(
-      env, "internal/bootstrap/switches/is_embedded_env", &bootstrap_args);
+  auto ret = env->principal_realm()->ExecuteBootstrapper(
+      "internal/bootstrap/switches/is_embedded_env", &bootstrap_args);
   if (ret.IsEmpty()) return napi_pending_exception;
 
   ret = node::LoadEnvironment(env, main_script);
