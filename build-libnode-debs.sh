@@ -1,12 +1,35 @@
-
 #!/bin/bash
 set -e
 
-./configure --shared
-make -j$(nproc)
-
-# Ruta base del build de Node.js
+# Variables
+PYTHON_VERSION="3.11.9"
+PYENV_ROOT="$HOME/.pyenv"
 BUILD_DIR="$(pwd)/out/Release"
+
+# Instalar pyenv si no existe
+if [ ! -d "$PYENV_ROOT" ]; then
+  curl https://pyenv.run | bash
+fi
+
+# Cargar pyenv en este script
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
+
+# Instalar Python 3.11.9 si no está
+if ! pyenv versions --bare | grep -q "^${PYTHON_VERSION}$"; then
+  pyenv install "$PYTHON_VERSION"
+fi
+
+# Activar temporalmente Python 3.11.9 solo para este script
+pyenv shell "$PYTHON_VERSION"
+
+# Confirmación
+echo "✅ Python en uso: $(python --version)"
+
+# Configurar y compilar Node.js
+./configure --shared
+make -j"$(nproc)"
 
 # Verificar que libnode.so existe
 if [ ! -f "$BUILD_DIR/libnode.so" ]; then
@@ -19,7 +42,7 @@ mkdir -p debs/libnode109/usr/lib
 mkdir -p debs/libnode109/DEBIAN
 
 # Copiar libnode.so y symlinks
-cp -a $BUILD_DIR/libnode.so* debs/libnode109/usr/lib/
+cp -a "$BUILD_DIR/libnode.so"* debs/libnode109/usr/lib/
 
 # Crear control file para libnode109
 cat <<EOF > debs/libnode109/DEBIAN/control
@@ -39,7 +62,6 @@ mkdir -p debs/libnode-dev/DEBIAN
 # Copiar headers
 cp -r src/*.h debs/libnode-dev/usr/include/node/ || true
 cp -r deps/v8/include/* debs/libnode-dev/usr/include/node/
-# cp -r $BUILD_DIR/obj/gen/include/* debs/libnode-dev/usr/include/node/ || true
 cp config.gypi debs/libnode-dev/usr/include/node/ || true
 
 # Crear control file para libnode-dev
@@ -57,6 +79,10 @@ EOF
 # Crear los .deb
 dpkg-deb --build debs/libnode109
 dpkg-deb --build debs/libnode-dev
+
+# Limpiar pyenv y Python
+pyenv shell --unset || true
+rm -rf "$PYENV_ROOT"
 
 echo "✅ Paquetes generados:"
 ls -lh debs/*.deb
