@@ -31,7 +31,15 @@ echo "✅ Python en uso: $(python --version)"
 ./configure --shared
 make -j"$(nproc)"
 
-# Verificar que libnode.so existe
+# Ruta esperada del .so real (puede variar según versión)
+REAL_SO="$(find "$BUILD_DIR" -name 'libnode.so.*' | grep -v '.dbg' | head -n1)"
+
+# Crear symlink si no existe
+if [ ! -f "$BUILD_DIR/libnode.so" ] && [ -f "$REAL_SO" ]; then
+  ln -s "$(basename "$REAL_SO")" "$BUILD_DIR/libnode.so"
+fi
+
+# Verificar que libnode.so existe ahora
 if [ ! -f "$BUILD_DIR/libnode.so" ]; then
   echo "❌ libnode.so no encontrado en $BUILD_DIR"
   exit 1
